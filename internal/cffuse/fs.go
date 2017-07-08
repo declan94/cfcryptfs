@@ -1,4 +1,3 @@
-// Package fuse interfaces directly with the go-fuse library.
 package cffuse
 
 // FUSE operations on paths
