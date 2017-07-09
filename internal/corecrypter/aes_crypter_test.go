@@ -1,4 +1,4 @@
-package crypter
+package corecrypter
 
 import (
 	"bytes"

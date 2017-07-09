@@ -1,4 +1,4 @@
-package crypter
+package contcrypter
 
 import (
 	"bytes"
@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"errors"
 
+	"github.com/Declan94/cfcryptfs/internal/corecrypter"
 	"github.com/hanwen/go-fuse/fuse"
 )
 
@@ -14,7 +15,7 @@ const signLen = md5.Size
 
 // ContentCrypter encrypt and decrypt file content
 type ContentCrypter struct {
-	core CoreCrypter
+	core corecrypter.CoreCrypter
 	// plain block size
 	plainBS int
 	// cipher block size
@@ -31,7 +32,7 @@ type ContentCrypter struct {
 }
 
 // NewContentCrypter initiate a ContentCrypter
-func NewContentCrypter(core CoreCrypter, plainBS int) *ContentCrypter {
+func NewContentCrypter(core corecrypter.CoreCrypter, plainBS int) *ContentCrypter {
 	// encrypted length plus signature length
 	cipherBS := core.LenAfterEncrypted(plainBS) + signLen
 	cReqSize := int(fuse.MAX_KERNEL_WRITE / plainBS * cipherBS)
@@ -67,7 +68,7 @@ func (cc *ContentCrypter) encryptBlock(plain []byte, blockNo uint64, fileID []by
 	cipherDataBlock := cc.cBlockPool.Get()
 	cc.core.Encrypt(cipherDataBlock, plain)
 	cipherDataLen := cc.core.LenAfterEncrypted(len(plain))
-	// Block is authenticated with block number and file ID
+	// Block is authenticated with block numccr and file ID
 	signedBlock := cipherDataBlock[:cipherDataLen+signLen]
 	cipherDataBlock = cipherDataBlock[:cipherDataLen]
 	copy(signedBlock[cipherDataLen:], cc.makeSign(cipherDataBlock, blockNo, fileID))
