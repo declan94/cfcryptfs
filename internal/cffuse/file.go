@@ -133,7 +133,9 @@ func (f *file) Chmod(mode uint32) fuse.Status {
 	}
 	f.ent.headerLock.Lock()
 	defer f.ent.headerLock.Unlock()
-	f.ent.header.Mode = mode | 32768
+
+	// mode here doesn't have S_IFREG bit, we should add
+	f.ent.header.Mode = mode | syscall.S_IFREG
 
 	f.ent.contentLock.Lock()
 	defer f.ent.contentLock.Unlock()

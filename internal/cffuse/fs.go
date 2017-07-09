@@ -87,12 +87,27 @@ func (fs *FS) Open(path string, flags uint32, context *fuse.Context) (fuseFile n
 
 // Chmod implements pathfs.Filesystem.
 func (fs *FS) Chmod(path string, mode uint32, context *fuse.Context) (code fuse.Status) {
-	f, status := fs.Open(path, uint32(os.O_RDWR), context)
-	if status != fuse.OK {
+	a, status := fs.FileSystem.GetAttr(path, context)
+	if a == nil {
+		tlog.Debug.Printf("FS.GetAttr failed: %s", status.String())
 		return status
 	}
-	status = f.Chmod(mode)
-	f.Release()
+	if a.IsRegular() {
+		f, status := fs.Open(path, uint32(os.O_RDWR), context)
+		if status != fuse.OK {
+			return status
+		}
+		status = f.Chmod(mode)
+		f.Release()
+	} else {
+		cPath, err := fs.getBackingPath(path)
+		if err != nil {
+			return fuse.ToStatus(err)
+		}
+		err = syscall.Chmod(cPath, mode)
+		status = fuse.ToStatus(err)
+	}
+
 	return status
 }
 
@@ -107,7 +122,6 @@ func (fs *FS) GetAttr(path string, context *fuse.Context) (*fuse.Attr, fuse.Stat
 	if a.IsRegular() {
 		f, status := fs.Open(path, uint32(os.O_RDWR), context)
 		if status != fuse.OK {
-			tlog.Debug.Printf("open failed, so get attr failed")
 			return nil, status
 		}
 		status = f.GetAttr(a)
