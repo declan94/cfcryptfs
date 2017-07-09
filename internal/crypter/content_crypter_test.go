@@ -32,3 +32,34 @@ func TestCryptBlock(t *testing.T) {
 		t.Error("decrypted != plaintext")
 	}
 }
+
+func TestCryptBlocks(t *testing.T) {
+	key := make([]byte, AES256KeySize)
+	fileID := make([]byte, 32)
+	if _, err := io.ReadFull(rand.Reader, key); err != nil {
+		panic(err)
+	}
+	if _, err := io.ReadFull(rand.Reader, fileID); err != nil {
+		panic(err)
+	}
+	plainBS := 256
+	ac := NewAesCrypter(key)
+	cc := NewContentCrypter(ac, plainBS)
+	plainText := make([]byte, int(plainBS*5+plainBS/2))
+	if _, err := io.ReadFull(rand.Reader, plainText); err != nil {
+		panic(err)
+	}
+	blocks := make([][]byte, 6)
+	for i := 0; i < 5; i++ {
+		blocks[i] = plainText[i*plainBS : (i+1)*plainBS]
+	}
+	blocks[5] = plainText[5*plainBS:]
+	cipher := cc.EncryptBlocks(blocks, 0, fileID)
+	decrypted, err := cc.DecryptBlocks(cipher, 0, fileID)
+	if err != nil {
+		t.Error(err)
+	}
+	if !bytes.Equal(decrypted, plainText) {
+		t.Error("decrypted != plaintext")
+	}
+}
