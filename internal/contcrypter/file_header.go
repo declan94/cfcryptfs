@@ -5,7 +5,8 @@ package contcrypter
 // Format: [ "Version" uint16 big endian ] [ "Id" 16 random bytes ]
 
 import (
-	"bytes"
+	"crypto/hmac"
+	"crypto/md5"
 	"encoding/binary"
 	"log"
 	"syscall"
@@ -18,39 +19,51 @@ const (
 	// CurrentVersion is the current On-Disk-Format version
 	CurrentVersion = 0
 
-	headerVersionLen = 2  // uint16
-	headerIDLen      = 16 // 128 bit random file id
+	headerVersionLen    = 2  // uint16
+	headerIDLen         = 16 // 128 bit random file id
+	headerPropertiesLen = 16 // 4 bytes mode, 12 bytes reserved
+	headerSignLen       = md5.Size
 	// HeaderLen is the total header length
-	HeaderLen = headerVersionLen + headerIDLen
+	HeaderLen = headerVersionLen + headerIDLen + headerPropertiesLen + headerSignLen
 )
 
 // FileHeader represents the header stored on each non-empty file.
 type FileHeader struct {
 	Version uint16
 	FileID  []byte
+	Mode    uint32
+	sign    []byte
 }
 
-// RandomHeader - create new fileHeader object with random Id
-func RandomHeader() *FileHeader {
+// NewFileHeader - create new fileHeader object with random Id
+func NewFileHeader(mode uint32) *FileHeader {
 	var h FileHeader
 	h.Version = CurrentVersion
 	h.FileID = corecrypter.RandBytes(headerIDLen)
+	h.Mode = mode
+	h.sign = make([]byte, headerSignLen)
 	return &h
 }
 
-// Pack - serialize fileHeader object
+// Pack - sign and serialize fileHeader object
 func (h *FileHeader) Pack() []byte {
 	if len(h.FileID) != headerIDLen || h.Version != CurrentVersion {
 		log.Panic("FileHeader object not properly initialized")
 	}
 	buf := make([]byte, HeaderLen)
-	binary.BigEndian.PutUint16(buf[0:headerVersionLen], h.Version)
-	copy(buf[headerVersionLen:], h.FileID)
+	p := 0
+	binary.BigEndian.PutUint16(buf[p:], h.Version)
+	p += headerVersionLen
+	copy(buf[p:], h.FileID)
+	p += headerIDLen
+	binary.BigEndian.PutUint32(buf[p:], h.Mode)
+	p += headerPropertiesLen
+	mac := hmac.New(md5.New, h.FileID)
+	mac.Write(buf[:p])
+	sign := mac.Sum(nil)
+	copy(buf[p:], sign)
 	return buf
 }
-
-// allZeroFileID is preallocated to quickly check if the data read from disk is all zero
-var allZeroFileID = make([]byte, headerIDLen)
 
 // ParseHeader - parse "buf" into fileHeader object
 func ParseHeader(buf []byte) (*FileHeader, error) {
@@ -59,15 +72,25 @@ func ParseHeader(buf []byte) (*FileHeader, error) {
 		return nil, syscall.EINVAL
 	}
 	var h FileHeader
-	h.Version = binary.BigEndian.Uint16(buf[0:headerVersionLen])
+	p := 0
+	h.Version = binary.BigEndian.Uint16(buf[p : p+headerVersionLen])
+	p += headerVersionLen
+	h.FileID = buf[p : p+headerIDLen]
+	p += headerIDLen
+	h.Mode = binary.BigEndian.Uint32(buf[p : p+4])
+	p += headerPropertiesLen
+	h.sign = buf[p:]
+	mac := hmac.New(md5.New, h.FileID)
+	mac.Write(buf[:p])
+	expectedSign := mac.Sum(nil)
+	if !hmac.Equal(expectedSign, h.sign) {
+		tlog.Warn.Printf("ParseHeader: invalid header signature, has file been manually modified?. Returning EINVAL.")
+		return nil, syscall.EINVAL
+	}
 	if h.Version != CurrentVersion {
 		tlog.Warn.Printf("ParseHeader: invalid version: want %d, got %d. Returning EINVAL.", CurrentVersion, h.Version)
 		return nil, syscall.EINVAL
 	}
-	h.FileID = buf[headerVersionLen:]
-	if bytes.Equal(h.FileID, allZeroFileID) {
-		tlog.Warn.Printf("ParseHeader: file id is all-zero. Returning EINVAL.")
-		return nil, syscall.EINVAL
-	}
+
 	return &h, nil
 }

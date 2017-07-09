@@ -18,6 +18,7 @@ func main() {
 
 	var fsConf = cffuse.FsConfig{
 		CipherDir: args.CipherDir,
+		CryptType: args.CryptType,
 	}
 	var fs = cffuse.NewFS(fsConf)
 	var finalFs pathfs.FileSystem
