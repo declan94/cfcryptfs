@@ -5,6 +5,7 @@ package cffuse
 import (
 	"os"
 	"path/filepath"
+	"syscall"
 
 	"github.com/Declan94/cfcryptfs/internal/contcrypter"
 	"github.com/Declan94/cfcryptfs/internal/tlog"
@@ -35,6 +36,7 @@ func NewFS(confs FsConfig) *FS {
 // Create implements pathfs.Filesystem.
 func (fs *FS) Create(path string, flags uint32, mode uint32, context *fuse.Context) (fuseFile nodefs.File, code fuse.Status) {
 
+	tlog.Debug.Printf("FS.Create(%s, %d, %d)", path, flags, mode)
 	newFlags := fs.mangleOpenFlags(flags)
 	cPath, err := fs.getBackingPath(path)
 	if err != nil {
@@ -54,9 +56,66 @@ func (fs *FS) Create(path string, flags uint32, mode uint32, context *fuse.Conte
 	// Initialize File
 	file, status := newFile(fd, fs)
 	if status == fuse.OK {
-		file.initialize(mode)
+		file.initHeader(mode)
 	}
 	return file, status
+}
+
+// Open implements pathfs.Filesystem.
+func (fs *FS) Open(path string, flags uint32, context *fuse.Context) (fuseFile nodefs.File, status fuse.Status) {
+	newFlags := fs.mangleOpenFlags(flags)
+	cPath, err := fs.getBackingPath(path)
+	if err != nil {
+		tlog.Debug.Printf("Open: getBackingPath: %v", err)
+		return nil, fuse.ToStatus(err)
+	}
+	tlog.Debug.Printf("FS.Open: %s, %d", cPath, flags)
+	f, err := os.OpenFile(cPath, newFlags, 0666)
+	if err != nil {
+		tlog.Debug.Printf("Open Failed: %s\n", err)
+		err2 := err.(*os.PathError)
+		if err2.Err == syscall.EMFILE {
+			var lim syscall.Rlimit
+			syscall.Getrlimit(syscall.RLIMIT_NOFILE, &lim)
+			tlog.Warn.Printf("Open %q: too many open files. Current \"ulimit -n\": %d", cPath, lim.Cur)
+		}
+		return nil, fuse.ToStatus(err)
+	}
+
+	return newFile(f, fs)
+}
+
+// Chmod implements pathfs.Filesystem.
+func (fs *FS) Chmod(path string, mode uint32, context *fuse.Context) (code fuse.Status) {
+	f, status := fs.Open(path, uint32(os.O_RDWR), context)
+	if status != fuse.OK {
+		return status
+	}
+	status = f.Chmod(mode)
+	f.Release()
+	return status
+}
+
+// GetAttr implements pathfs.Filesystem.
+func (fs *FS) GetAttr(path string, context *fuse.Context) (*fuse.Attr, fuse.Status) {
+	tlog.Debug.Printf("FS.GetAttr('%s')", path)
+	a, status := fs.FileSystem.GetAttr(path, context)
+	if a == nil {
+		tlog.Debug.Printf("FS.GetAttr failed: %s", status.String())
+		return a, status
+	}
+	if a.IsRegular() {
+		f, status := fs.Open(path, uint32(os.O_RDWR), context)
+		if status != fuse.OK {
+			tlog.Debug.Printf("open failed, so get attr failed")
+			return nil, status
+		}
+		status = f.GetAttr(a)
+		f.Release()
+	} else if a.IsSymlink() {
+		// not implemented now
+	}
+	return a, status
 }
 
 // mangleOpenFlags is used by Create() and Open() to convert the open flags the user

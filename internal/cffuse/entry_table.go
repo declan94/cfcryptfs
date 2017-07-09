@@ -23,12 +23,6 @@ type entry struct {
 	header *contcrypter.FileHeader
 }
 
-func (en *entry) newHeader(mode uint32) {
-	en.headerLock.Lock()
-	defer en.headerLock.Unlock()
-	en.header = contcrypter.NewFileHeader(mode)
-}
-
 type entrytable struct {
 	// writeOpCount counts entry.ContentLock.Lock() calls. As every operation that
 	// modifies a file should
@@ -84,11 +78,11 @@ func init() {
 
 // countingMutex incrementes t.writeLockCount on each Lock() call.
 type countingMutex struct {
-	sync.Mutex
+	sync.RWMutex
 }
 
 func (c *countingMutex) Lock() {
-	c.Mutex.Lock()
+	c.RWMutex.Lock()
 	atomic.AddUint64(&enttable.writeOpCount, 1)
 }
 

@@ -52,7 +52,7 @@ func (cc *ContentCrypter) BlockNoToPlainOff(blockNo uint64) uint64 {
 // CipherSizeToPlainSize calculates the plaintext size from a ciphertext size
 func (cc *ContentCrypter) CipherSizeToPlainSize(cipherSize uint64) uint64 {
 	// Zero-sized files stay zero-sized
-	if cipherSize == 0 {
+	if cipherSize == 0 || cipherSize == HeaderLen {
 		return 0
 	}
 	if cipherSize < HeaderLen {

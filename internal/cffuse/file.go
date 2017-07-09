@@ -93,6 +93,60 @@ func newFile(fd *os.File, fs *FS) (*file, fuse.Status) {
 	return f, fuse.OK
 }
 
+func (f *file) GetAttr(a *fuse.Attr) fuse.Status {
+	f.fdLock.RLock()
+	defer f.fdLock.RUnlock()
+
+	tlog.Debug.Printf("file.GetAttr()")
+	st := syscall.Stat_t{}
+	err := syscall.Fstat(int(f.fd.Fd()), &st)
+	if err != nil {
+		tlog.Debug.Printf("get attr failed1: %s", err)
+		return fuse.ToStatus(err)
+	}
+	a.FromStat(&st)
+	// rlock content to make sure not writing now
+	f.ent.contentLock.RLock()
+	defer f.ent.contentLock.RUnlock()
+	a.Size = f.contentEnc.CipherSizeToPlainSize(a.Size)
+	if err = f.loadHeader(); err != nil {
+		tlog.Debug.Printf("get attr failed2: %s", err)
+		return fuse.ToStatus(err)
+	}
+	f.ent.headerLock.RLock()
+	defer f.ent.headerLock.RUnlock()
+	a.Mode = f.ent.header.Mode
+	tlog.Debug.Printf("Mode: %d", a.Mode)
+
+	return fuse.OK
+}
+
+func (f *file) Chmod(mode uint32) fuse.Status {
+
+	tlog.Debug.Printf("file.Chmod(%d)", mode)
+	f.fdLock.RLock()
+	defer f.fdLock.RUnlock()
+
+	if err := f.loadHeader(); err != nil {
+		tlog.Debug.Printf("chmod failed1: %s", err)
+		return fuse.ToStatus(err)
+	}
+	f.ent.headerLock.Lock()
+	defer f.ent.headerLock.Unlock()
+	f.ent.header.Mode = mode | 32768
+
+	f.ent.contentLock.Lock()
+	defer f.ent.contentLock.Unlock()
+
+	_, err := f.fd.WriteAt(f.ent.header.Pack(), 0)
+
+	if err != nil {
+		tlog.Debug.Printf("Chmod err: %s", err)
+	}
+
+	return fuse.ToStatus(err)
+}
+
 // Release - FUSE call, close file
 func (f *file) Release() {
 	f.fdLock.Lock()
@@ -106,9 +160,31 @@ func (f *file) Release() {
 }
 
 // Initialize create headers in the backing file
-func (f *file) initialize(mode uint32) {
-	f.ent.newHeader(mode)
+func (f *file) initHeader(mode uint32) {
+	f.ent.headerLock.Lock()
+	f.ent.header = contcrypter.NewFileHeader(mode)
+	f.ent.headerLock.Unlock()
+	f.fdLock.RLock()
 	f.ent.contentLock.Lock()
-	defer f.ent.contentLock.Unlock()
 	f.fd.WriteAt(f.ent.header.Pack(), 0)
+	f.ent.contentLock.Unlock()
+	f.fdLock.RUnlock()
+}
+
+func (f *file) loadHeader() error {
+	if f.ent.header != nil {
+		// Already loaded
+		return nil
+	}
+	buf := make([]byte, contcrypter.HeaderLen)
+	n, err := f.fd.ReadAt(buf, 0)
+	if err != nil {
+		tlog.Debug.Println("io error while load header")
+		return err
+	}
+	buf = buf[:n]
+	f.ent.headerLock.Lock()
+	defer f.ent.headerLock.Unlock()
+	f.ent.header, err = contcrypter.ParseHeader(buf)
+	return err
 }
