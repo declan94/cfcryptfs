@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/Declan94/cfcryptfs/internal/contcrypter"
+	"github.com/Declan94/cfcryptfs/internal/corecrypter"
 	"github.com/Declan94/cfcryptfs/internal/tlog"
 	"github.com/hanwen/go-fuse/fuse"
 	"github.com/hanwen/go-fuse/fuse/nodefs"
@@ -26,10 +27,13 @@ var _ pathfs.FileSystem = &FS{} // Verify that interface is implemented.
 
 // NewFS returns a new encrypted FUSE overlay filesystem.
 func NewFS(confs FsConfig) *FS {
+	core := corecrypter.NewCoreCrypter(confs.CryptType, confs.CryptKey)
+	contEnc := contcrypter.NewContentCrypter(core, confs.PlainBS)
 	return &FS{
 		FileSystem:      pathfs.NewLoopbackFileSystem(confs.CipherDir),
 		configs:         confs,
 		backingFileMode: 0600,
+		contentEnc:      contEnc,
 	}
 }
 
@@ -109,6 +113,19 @@ func (fs *FS) Chmod(path string, mode uint32, context *fuse.Context) (code fuse.
 	}
 
 	return status
+}
+
+// Chown implements pathfs.Filesystem.
+func (fs *FS) Chown(path string, uid uint32, gid uint32, context *fuse.Context) (code fuse.Status) {
+	cPath, err := fs.getBackingPath(path)
+	if err != nil {
+		return fuse.ToStatus(err)
+	}
+	code = fuse.ToStatus(os.Lchown(cPath, int(uid), int(gid)))
+	if !code.Ok() {
+		return code
+	}
+	return fuse.OK
 }
 
 // GetAttr implements pathfs.Filesystem.

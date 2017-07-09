@@ -1,6 +1,8 @@
 package cffuse
 
 import (
+	"bytes"
+	"io"
 	"log"
 	"os"
 	"sync"
@@ -149,6 +151,180 @@ func (f *file) Chmod(mode uint32) fuse.Status {
 	return fuse.ToStatus(err)
 }
 
+func (f *file) Read(buf []byte, off int64) (resultData fuse.ReadResult, code fuse.Status) {
+	out, status := f.read(uint64(off), len(buf))
+	return fuse.ReadResultData(out), status
+}
+
+// read - read "length" plaintext bytes from plaintext offset "off"
+// Arguments "length" and "off" do not have to be block-aligned.
+//
+// read reads the corresponding ciphertext blocks from disk, decrypts them and
+// returns the requested part of the plaintext.
+//
+// Called by Read() for normal reading,
+// by Write() and Truncate() for Read-Modify-Write
+func (f *file) read(off uint64, length int) ([]byte, fuse.Status) {
+	// Make sure we have the file ID.
+	if err := f.loadHeader(); err != nil {
+		tlog.Debug.Printf("Read failed1: %s", err)
+		return nil, fuse.ToStatus(err)
+	}
+	f.ent.headerLock.RLock()
+	fileID := f.ent.header.FileID
+	// Read the backing ciphertext in one go
+	skip, alignedOffset, alignedLength := f.contentEnc.TransformPlainRange(off, length)
+	tlog.Debug.Printf("TransformRange(%d, %d) -> %d, %d, %d", off, length, alignedOffset, alignedLength, skip)
+	ciphertext := f.fs.contentEnc.CReqPool.Get()
+	ciphertext = ciphertext[:int(alignedLength)]
+	n, err := f.fd.ReadAt(ciphertext, int64(alignedOffset))
+	f.ent.headerLock.RUnlock()
+
+	if err != nil && err != io.EOF {
+		tlog.Warn.Printf("read: ReadAt: %s", err.Error())
+		return nil, fuse.ToStatus(err)
+	}
+	// The ReadAt came back empty. We can skip all the decryption and return early.
+	if n == 0 {
+		f.fs.contentEnc.CReqPool.Put(ciphertext)
+		return nil, fuse.OK
+	}
+	// Truncate ciphertext buffer down to actually read bytes
+	ciphertext = ciphertext[0:n]
+
+	firstBlockNo := f.contentEnc.CipherOffToBlockNo(alignedOffset)
+	tlog.Debug.Printf("ReadAt offset=%d bytes (%d blocks), want=%d, got=%d", alignedOffset, firstBlockNo, alignedLength, n)
+
+	// Decrypt it
+	plaintext, err := f.contentEnc.DecryptBlocks(ciphertext, firstBlockNo, fileID)
+	f.fs.contentEnc.CReqPool.Put(ciphertext)
+	if err != nil {
+		curruptBlockNo := firstBlockNo + f.contentEnc.PlainOffToBlockNo(uint64(len(plaintext)))
+		tlog.Warn.Printf("ino%d: doRead: corrupt block #%d: %v", f.qIno.Ino, curruptBlockNo, err)
+		return nil, fuse.EIO
+	}
+
+	// Crop down to the relevant part
+	var out []byte
+	lenHave := len(plaintext)
+	lenWant := int(skip + length)
+	if lenHave > lenWant {
+		out = plaintext[skip:lenWant]
+	} else if lenHave > int(skip) {
+		out = plaintext[skip:lenHave]
+	}
+	// else: out stays empty, file was smaller than the requested offset
+
+	f.fs.contentEnc.PReqPool.Put(plaintext)
+
+	return out, fuse.OK
+}
+
+// isConsecutiveWrite returns true if the current write
+// directly (in time and space) follows the last write.
+// This is an optimisation for streaming writes on NFS where a
+// Stat() call is very expensive.
+// The caller must "wlock.lock(f.devIno.ino)" otherwise this check would be racy.
+func (f *file) isConsecutiveWrite(off int64) bool {
+	opCount := enttable.writeOpCount
+	return opCount == f.lastOpCount+1 && off == f.lastWrittenOffset+1
+}
+
+// Write - FUSE call
+//
+// If the write creates a hole, pads the file to the next block boundary.
+func (f *file) Write(data []byte, off int64) (uint32, fuse.Status) {
+	f.fdLock.RLock()
+	defer f.fdLock.RUnlock()
+	if f.released {
+		// The file descriptor has been closed concurrently, which also means
+		// the wlock has been freed. Exit here so we don't crash trying to access
+		// it.
+		tlog.Warn.Printf("ino%d fh%d: Write on released file", f.qIno.Ino, int(f.fd.Fd()))
+		return 0, fuse.EBADF
+	}
+	f.ent.contentLock.Lock()
+	defer f.ent.contentLock.Unlock()
+	tlog.Debug.Printf("ino%d: FUSE Write: offset=%d length=%d", f.qIno.Ino, off, len(data))
+	// If the write creates a file hole, we have to zero-pad the last block.
+	// But if the write directly follows an earlier write, it cannot create a
+	// hole, and we can save one Stat() call.
+	if !f.isConsecutiveWrite(off) {
+		status := f.writePadHole(off)
+		if !status.Ok() {
+			return 0, status
+		}
+	}
+	n, status := f.write(data, off)
+	if status.Ok() {
+		f.lastOpCount = enttable.writeOpCount
+		f.lastWrittenOffset = off + int64(len(data)) - 1
+	}
+	return n, status
+}
+
+// write - encrypt "data" and write it to plaintext offset "off"
+//
+// Arguments do not have to be block-aligned, read-modify-write is
+// performed internally as necessary
+//
+// Called by Write() for normal writing,
+// and by Truncate() to rewrite the last file block.
+//
+// Empty writes do nothing and are allowed.
+func (f *file) write(data []byte, off int64) (uint32, fuse.Status) {
+	// Make sure we have the file ID.
+	if err := f.loadHeader(); err != nil {
+		tlog.Debug.Printf("Read failed1: %s", err)
+		return 0, fuse.ToStatus(err)
+	}
+	f.ent.headerLock.RLock()
+	defer f.ent.headerLock.RUnlock()
+	// Handle payload data
+	dataBuf := bytes.NewBuffer(data)
+	blocks := f.contentEnc.ExplodePlainRange(uint64(off), len(data))
+	toEncrypt := make([][]byte, len(blocks))
+	for i, b := range blocks {
+		blockData := dataBuf.Next(int(b.Length))
+		// Incomplete block -> Read-Modify-Write
+		if b.Partial {
+			// Read
+			oldData, status := f.read(f.contentEnc.BlockNoToPlainOff(b.BlockNo), f.contentEnc.PlainBS())
+			if status != fuse.OK {
+				tlog.Warn.Printf("ino%d fh%d: RMW read failed: %s", f.qIno.Ino, int(f.fd.Fd()), status.String())
+				return 0, status
+			}
+			// Modify
+			blockData = f.contentEnc.RewriteBlock(oldData, blockData, int(b.Skip))
+			tlog.Debug.Printf("len(oldData)=%d len(blockData)=%d", len(oldData), len(blockData))
+		}
+		tlog.Debug.Printf("ino%d: Writing %d bytes to block #%d",
+			f.qIno.Ino, uint64(len(blockData))-f.contentEnc.BlockOverhead(), b.BlockNo)
+		// Write into the to-encrypt list
+		toEncrypt[i] = blockData
+	}
+	// Encrypt all blocks
+	ciphertext := f.contentEnc.EncryptBlocks(toEncrypt, blocks[0].BlockNo, f.ent.header.FileID)
+	// Preallocate so we cannot run out of space in the middle of the write.
+	// This prevents partially written (=corrupt) blocks.
+	var err error
+	cOff := int64(f.contentEnc.BlockNoToCipherOff(blocks[0].BlockNo))
+	// err = syscallcompat.EnospcPrealloc(int(f.fd.Fd()), cOff, int64(len(ciphertext)))
+	// if err != nil {
+	// 	tlog.Warn.Printf("ino%d fh%d: write: prealloc failed: %s", f.qIno.Ino, int(f.fd.Fd()), err.Error())
+	// 	return 0, fuse.ToStatus(err)
+	// }
+	// Write
+	_, err = f.fd.WriteAt(ciphertext, cOff)
+	// Return memory to CReqPool
+	f.fs.contentEnc.CReqPool.Put(ciphertext)
+	if err != nil {
+		tlog.Warn.Printf("write: Write failed: %s", err.Error())
+		return 0, fuse.ToStatus(err)
+	}
+	return uint32(len(data)), fuse.OK
+}
+
 // Release - FUSE call, close file
 func (f *file) Release() {
 	f.fdLock.Lock()
@@ -189,4 +365,50 @@ func (f *file) loadHeader() error {
 	defer f.ent.headerLock.Unlock()
 	f.ent.header, err = contcrypter.ParseHeader(buf)
 	return err
+}
+
+// Will a write to plaintext offset "targetOff" create a file hole in the
+// ciphertext? If yes, zero-pad the last ciphertext block.
+func (f *file) writePadHole(targetOff int64) fuse.Status {
+	// Get the current file size.
+	fi, err := f.fd.Stat()
+	if err != nil {
+		tlog.Warn.Printf("checkAndPadHole: Fstat failed: %v", err)
+		return fuse.ToStatus(err)
+	}
+	plainSize := f.contentEnc.CipherSizeToPlainSize(uint64(fi.Size()))
+	// Appending a single byte to the file (equivalent to writing to
+	// offset=plainSize) would write to "nextBlock".
+	nextBlock := f.contentEnc.PlainOffToBlockNo(plainSize)
+	// targetBlock is the block the user wants to write to.
+	targetBlock := f.contentEnc.PlainOffToBlockNo(uint64(targetOff))
+	// The write goes into an existing block or (if the last block was full)
+	// starts a new one directly after the last block. Nothing to do.
+	if targetBlock <= nextBlock {
+		return fuse.OK
+	}
+	// The write goes past the next block. nextBlock has
+	// to be zero-padded to the block boundary and (at least) nextBlock+1
+	// will contain a file hole in the ciphertext.
+	status := f.zeroPad(plainSize)
+	if status != fuse.OK {
+		tlog.Warn.Printf("zeroPad returned error %v", status)
+		return status
+	}
+	return fuse.OK
+}
+
+// Zero-pad the file of size plainSize to the next block boundary. This is a no-op
+// if the file is already block-aligned.
+func (f *file) zeroPad(plainSize uint64) fuse.Status {
+	lastBlockLen := plainSize % uint64(f.contentEnc.PlainBS())
+	if lastBlockLen == 0 {
+		// Already block-aligned
+		return fuse.OK
+	}
+	missing := uint64(f.contentEnc.PlainBS()) - lastBlockLen
+	pad := make([]byte, missing)
+	tlog.Debug.Printf("zeroPad: Writing %d bytes\n", missing)
+	_, status := f.write(pad, int64(plainSize))
+	return status
 }

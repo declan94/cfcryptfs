@@ -4,4 +4,6 @@ package cffuse
 type FsConfig struct {
 	CipherDir string
 	CryptType int
+	CryptKey  []byte
+	PlainBS   int
 }

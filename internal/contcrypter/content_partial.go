@@ -73,9 +73,8 @@ func (cc *ContentCrypter) CipherSizeToPlainSize(cipherSize uint64) uint64 {
 
 // PlainSizeToCipherSize calculates the ciphertext size from a plaintext size
 func (cc *ContentCrypter) PlainSizeToCipherSize(plainSize uint64) uint64 {
-	// Zero-sized files stay zero-sized
 	if plainSize == 0 {
-		return 0
+		return HeaderLen
 	}
 	// Block numccr at last byte
 	blockNo := cc.PlainOffToBlockNo(plainSize - 1)
@@ -109,6 +108,44 @@ func (cc *ContentCrypter) ExplodePlainRange(offset uint64, length int) []IntraBl
 		length -= nextBlock.Length
 	}
 	return blocks
+}
+
+// TransformPlainRange transform plain range to a cipher range for reading
+// 	plainSkip: offset to the block start
+//	alignedOff: the first block start pos in ciphertext before the transformed range
+// 	alignedLen: cipher length to cover the transformed range
+func (cc *ContentCrypter) TransformPlainRange(offset uint64, length int) (plainSkip int, alignedOff uint64, alignedLen int) {
+	blockNo := cc.PlainOffToBlockNo(offset)
+	alignedOff = cc.BlockNoToCipherOff(blockNo)
+	blockNo2 := cc.PlainOffToBlockNo(offset + uint64(length) - 1)
+	alignedLen = cc.cipherBS * int(blockNo2-blockNo+1)
+	plainSkip = int(offset - cc.BlockNoToPlainOff(blockNo))
+	return
+}
+
+// RewriteBlock - Merge newData into oldData at offset
+// New block may be bigger than both newData and oldData
+func (cc *ContentCrypter) RewriteBlock(oldData []byte, newData []byte, offset int) []byte {
+	// Fastpath for small-file creation
+	if len(oldData) == 0 && offset == 0 {
+		return newData
+	}
+
+	// Make block of maximum size
+	out := make([]byte, cc.plainBS)
+
+	// Copy old and new data into it
+	copy(out, oldData)
+	l := len(newData)
+	copy(out[offset:offset+l], newData)
+
+	// Crop to length
+	outLen := len(oldData)
+	newLen := offset + len(newData)
+	if outLen < newLen {
+		outLen = newLen
+	}
+	return out[0:outLen]
 }
 
 // BlockOverhead returns the per-block overhead.

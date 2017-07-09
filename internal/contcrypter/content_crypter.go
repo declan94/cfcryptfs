@@ -8,6 +8,7 @@ import (
 	"errors"
 
 	"github.com/Declan94/cfcryptfs/internal/corecrypter"
+	"github.com/Declan94/cfcryptfs/internal/tlog"
 	"github.com/hanwen/go-fuse/fuse"
 )
 
@@ -20,6 +21,8 @@ type ContentCrypter struct {
 	plainBS int
 	// cipher block size
 	cipherBS int
+	// All-zero block of size cipherBS, for fast compares
+	allZeroBlock []byte
 	// Ciphertext block pool. Always returns cipherBS-sized byte slices.
 	cBlockPool bPool
 	// Plaintext block pool. Always returns plainBS-sized byte slices.
@@ -37,13 +40,14 @@ func NewContentCrypter(core corecrypter.CoreCrypter, plainBS int) *ContentCrypte
 	cipherBS := core.LenAfterEncrypted(plainBS) + signLen
 	cReqSize := int(fuse.MAX_KERNEL_WRITE / plainBS * cipherBS)
 	cc := &ContentCrypter{
-		core:       core,
-		plainBS:    plainBS,
-		cipherBS:   cipherBS,
-		cBlockPool: newBPool(cipherBS),
-		pBlockPool: newBPool(plainBS),
-		CReqPool:   newBPool(cReqSize),
-		PReqPool:   newBPool(fuse.MAX_KERNEL_WRITE),
+		core:         core,
+		plainBS:      plainBS,
+		cipherBS:     cipherBS,
+		allZeroBlock: make([]byte, cipherBS),
+		cBlockPool:   newBPool(cipherBS),
+		pBlockPool:   newBPool(plainBS),
+		CReqPool:     newBPool(cReqSize),
+		PReqPool:     newBPool(fuse.MAX_KERNEL_WRITE),
 	}
 
 	return cc
@@ -81,6 +85,11 @@ func (cc *ContentCrypter) decryptBlock(cipher []byte, blockNo uint64, fileID []b
 	}
 	if len(cipher) < signLen {
 		return nil, errors.New("Block is too short")
+	}
+	// All-zero block?
+	if bytes.Equal(cipher, cc.allZeroBlock) {
+		tlog.Debug.Printf("DecryptBlock: file hole encountered")
+		return make([]byte, cc.plainBS), nil
 	}
 	// Check authentication
 	split := len(cipher) - signLen
@@ -125,4 +134,14 @@ func (cc *ContentCrypter) DecryptBlocks(cipher []byte, firstBlockNo uint64, file
 		firstBlockNo++
 	}
 	return pBuf.Bytes(), err
+}
+
+// PlainBS return the plain block size
+func (cc *ContentCrypter) PlainBS() int {
+	return cc.plainBS
+}
+
+// CipherBS return the cipher block size
+func (cc *ContentCrypter) CipherBS() int {
+	return cc.cipherBS
 }

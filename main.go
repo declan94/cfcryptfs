@@ -2,23 +2,40 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"syscall"
 	"time"
 
 	"os"
 
 	"github.com/Declan94/cfcryptfs/internal/cffuse"
+	"github.com/Declan94/cfcryptfs/internal/tlog"
 	"github.com/hanwen/go-fuse/fuse"
 	"github.com/hanwen/go-fuse/fuse/nodefs"
 	"github.com/hanwen/go-fuse/fuse/pathfs"
 )
 
 func main() {
-	var args = ParseArgs()
+	var args = parseArgs()
 
+	if args.GenConf {
+		return
+	}
+	if args.KeyFile == "" {
+		tlog.Fatal.Printf("You should provide a keyfile in cli args or conf file!")
+		os.Exit(1)
+	}
+	// Read key
+	key, err := ioutil.ReadFile(args.KeyFile)
+	if err != nil {
+		tlog.Fatal.Printf("Read from key file error: %v", err)
+		os.Exit(1)
+	}
 	var fsConf = cffuse.FsConfig{
 		CipherDir: args.CipherDir,
-		CryptType: args.CryptType,
+		CryptType: args.CryptType.int,
+		CryptKey:  key,
+		PlainBS:   args.PlainBS,
 	}
 	var fs = cffuse.NewFS(fsConf)
 	var finalFs pathfs.FileSystem
