@@ -78,13 +78,17 @@ func (enttable *entrytable) unregister(qi QIno) {
 // keep the locking simple.
 var enttable entrytable
 
+func init() {
+	enttable.entries = make(map[QIno]*entry)
+}
+
 // countingMutex incrementes t.writeLockCount on each Lock() call.
 type countingMutex struct {
 	sync.Mutex
 }
 
 func (c *countingMutex) Lock() {
-	c.Lock()
+	c.Mutex.Lock()
 	atomic.AddUint64(&enttable.writeOpCount, 1)
 }
 

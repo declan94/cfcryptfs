@@ -1,6 +1,7 @@
 package cffuse
 
 import (
+	"log"
 	"os"
 	"sync"
 	"syscall"
@@ -90,6 +91,18 @@ func newFile(fd *os.File, fs *FS) (*file, fuse.Status) {
 	}
 
 	return f, fuse.OK
+}
+
+// Release - FUSE call, close file
+func (f *file) Release() {
+	f.fdLock.Lock()
+	if f.released {
+		log.Panicf("ino%d fh%d: double release", f.qIno.Ino, int(f.fd.Fd()))
+	}
+	f.fd.Close()
+	f.released = true
+	f.fdLock.Unlock()
+	enttable.unregister(f.qIno)
 }
 
 // Initialize create headers in the backing file
