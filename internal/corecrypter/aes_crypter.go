@@ -54,12 +54,17 @@ func (ac *AesCrypter) LenAfterDecrypted(cipherLen int) int {
 // (i.e. by using crypto/hmac) as well as being encrypted in order to be secure.
 // authentication will be down outside cryptor, to include file ID and block No.
 func (ac *AesCrypter) Encrypt(dest, src []byte) {
-	iv := dest[:aes.BlockSize]
+	iv := dest[:ac.blockSize]
 	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
 		panic(err)
 	}
-	stream := cipher.NewOFB(ac.cipherBlock, iv)
-	stream.XORKeyStream(dest[ac.blockSize:], src)
+	if len(src)%ac.blockSize == 0 {
+		crypt := cipher.NewCBCEncrypter(ac.cipherBlock, iv)
+		crypt.CryptBlocks(dest[ac.blockSize:], src)
+	} else {
+		stream := cipher.NewCFBEncrypter(ac.cipherBlock, iv)
+		stream.XORKeyStream(dest[ac.blockSize:], src)
+	}
 }
 
 // Decrypt decrypt cipher
@@ -68,6 +73,11 @@ func (ac *AesCrypter) Decrypt(dest, src []byte) {
 		panic("ciphertext too short")
 	}
 	iv := src[:ac.blockSize]
-	stream := cipher.NewOFB(ac.cipherBlock, iv)
-	stream.XORKeyStream(dest, src[aes.BlockSize:])
+	if len(src)%ac.blockSize == 0 {
+		crypt := cipher.NewCBCDecrypter(ac.cipherBlock, iv)
+		crypt.CryptBlocks(dest, src[ac.blockSize:])
+	} else {
+		stream := cipher.NewCFBDecrypter(ac.cipherBlock, iv)
+		stream.XORKeyStream(dest, src[ac.blockSize:])
+	}
 }

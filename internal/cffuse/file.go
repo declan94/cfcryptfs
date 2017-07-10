@@ -7,6 +7,7 @@ import (
 	"os"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/Declan94/cfcryptfs/internal/contcrypter"
 	"github.com/Declan94/cfcryptfs/internal/tlog"
@@ -323,6 +324,19 @@ func (f *file) write(data []byte, off int64) (uint32, fuse.Status) {
 		return 0, fuse.ToStatus(err)
 	}
 	return uint32(len(data)), fuse.OK
+}
+
+func (f *file) Fsync(flags int) (code fuse.Status) {
+	f.fdLock.RLock()
+	defer f.fdLock.RUnlock()
+
+	return fuse.ToStatus(syscall.Fsync(int(f.fd.Fd())))
+}
+
+func (f *file) Utimens(a *time.Time, m *time.Time) fuse.Status {
+	f.fdLock.RLock()
+	defer f.fdLock.RUnlock()
+	return f.loopbackFile.Utimens(a, m)
 }
 
 // Release - FUSE call, close file

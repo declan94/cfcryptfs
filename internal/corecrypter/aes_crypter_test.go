@@ -2,18 +2,22 @@ package corecrypter
 
 import (
 	"bytes"
-	"crypto/rand"
-	"io"
+	"fmt"
 	"testing"
 )
 
 func TestAesCrypter(t *testing.T) {
-	key := make([]byte, AES256KeySize)
-	if _, err := io.ReadFull(rand.Reader, key); err != nil {
+	testAesCrypter(10, t)
+	// testAesCrypter(1024, t)
+}
+
+func testAesCrypter(plainLen int, t *testing.T) {
+	key, err := RandomKey(AES256)
+	if err != nil {
 		panic(err)
 	}
 	ac := NewAesCrypter(key)
-	plainText := []byte("hello world")
+	plainText := RandBytes(plainLen)
 	desiredLen := ac.LenAfterEncrypted(len(plainText))
 	cipher := make([]byte, desiredLen)
 	ac.Encrypt(cipher, plainText)
@@ -23,6 +27,8 @@ func TestAesCrypter(t *testing.T) {
 	decrypted := make([]byte, len(plainText))
 	ac.Decrypt(decrypted, cipher)
 	if !bytes.Equal(decrypted, plainText) {
+		fmt.Println(plainText)
+		fmt.Println(decrypted)
 		t.Error("decrypted != plaintext")
 	}
 }

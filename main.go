@@ -3,12 +3,17 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
+	"os/exec"
+	"os/signal"
+	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
 	"os"
 
 	"github.com/Declan94/cfcryptfs/internal/cffuse"
+	"github.com/Declan94/cfcryptfs/internal/exitcode"
 	"github.com/Declan94/cfcryptfs/internal/tlog"
 	"github.com/hanwen/go-fuse/fuse"
 	"github.com/hanwen/go-fuse/fuse/nodefs"
@@ -23,13 +28,22 @@ func main() {
 	}
 	if args.KeyFile == "" {
 		tlog.Fatal.Printf("You should provide a keyfile in cli args or conf file!")
-		os.Exit(1)
+		os.Exit(exitcode.KeyFile)
 	}
 	// Read key
 	key, err := ioutil.ReadFile(args.KeyFile)
 	if err != nil {
 		tlog.Fatal.Printf("Read from key file error: %v", err)
-		os.Exit(1)
+		os.Exit(exitcode.KeyFile)
+	}
+
+	// Check mountpoint
+	// We cannot mount "/home/user/.cipher" at "/home/user" because the mount
+	// will hide ".cipher" also for us.
+	if args.CipherDir == args.MountPoint || strings.HasPrefix(args.CipherDir, args.MountPoint+"/") {
+		tlog.Fatal.Printf("Mountpoint %q would shadow cipherdir %q, this is not supported",
+			args.MountPoint, args.CipherDir)
+		os.Exit(exitcode.MountPoint)
 	}
 	var fsConf = cffuse.FsConfig{
 		CipherDir: args.CipherDir,
@@ -63,7 +77,7 @@ func main() {
 
 	if err != nil {
 		fmt.Println("Start fuse server failed")
-		os.Exit(1)
+		os.Exit(exitcode.Fuse)
 	}
 
 	srv.SetDebug(args.DebugFuse)
@@ -73,6 +87,33 @@ func main() {
 	// directories with the requested permissions.
 	syscall.Umask(0000)
 
+	// Wait for SIGINT in the background and unmount ourselves if we get it.
+	// This prevents a dangling "Transport endpoint is not connected"
+	// mountpoint if the user hits CTRL-C.
+	handleSigint(srv, args.MountPoint)
+
 	fmt.Println("Filesystem Mounted")
 	srv.Serve()
+}
+
+func handleSigint(srv *fuse.Server, mountpoint string) {
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, os.Interrupt)
+	signal.Notify(ch, syscall.SIGTERM)
+	go func() {
+		<-ch
+		err := srv.Unmount()
+		if err != nil {
+			tlog.Warn.Print(err)
+			if runtime.GOOS == "linux" {
+				// MacOSX does not support lazy unmount
+				tlog.Info.Printf("Trying lazy unmount")
+				cmd := exec.Command("fusermount", "-u", "-z", mountpoint)
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				cmd.Run()
+			}
+		}
+		os.Exit(exitcode.SigInt)
+	}()
 }

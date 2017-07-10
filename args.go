@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/Declan94/cfcryptfs/internal/corecrypter"
+	"github.com/Declan94/cfcryptfs/internal/exitcode"
 	"github.com/Declan94/cfcryptfs/internal/tlog"
 )
 
@@ -49,14 +50,14 @@ func loadArgsFromConf(path string) (args Args) {
 	js, err := ioutil.ReadFile(path)
 	if err != nil {
 		tlog.Fatal.Printf("Read from config file error: %v", err)
-		os.Exit(1)
+		os.Exit(exitcode.ConfFile)
 	}
 	var cf ConfFile
 	// Unmarshal
 	err = json.Unmarshal(js, &cf)
 	if err != nil {
 		tlog.Fatal.Printf("Failed to parse config file")
-		os.Exit(1)
+		os.Exit(exitcode.ConfFile)
 	}
 	args.CryptType.Set(cf.CryptType)
 	args.KeyFile = cf.KeyFile
@@ -76,7 +77,7 @@ func saveArgsToConf(path string, args *Args) error {
 	js, err := json.MarshalIndent(cf, "", "\t")
 	if err != nil {
 		tlog.Fatal.Printf("Failed to marshal configs")
-		os.Exit(1)
+		os.Exit(exitcode.ConfFile)
 	}
 	// For convenience for the user, add a newline at the end.
 	js = append(js, '\n')
@@ -105,7 +106,7 @@ func generateConf(args Args) {
 		key, err := corecrypter.RandomKey(args.CryptType.int)
 		if err != nil {
 			tlog.Fatal.Printf("Generate random key failed: %s", err)
-			os.Exit(1)
+			os.Exit(exitcode.KeyFile)
 		}
 		for true {
 			fmt.Printf("Where to save the key file (~/.cfcryptfs_key)?")
@@ -216,11 +217,29 @@ func parseArgs() (args Args) {
 	if flagSet.NArg() != 2 {
 		usage()
 		fmt.Printf("Wrong args count: %d\n", flagSet.NArg())
-		os.Exit(2)
+		os.Exit(exitcode.Usage)
 	}
 
-	args.CipherDir = flagSet.Arg(0)
-	args.MountPoint = flagSet.Arg(1)
+	// check directories
+	var err error
+	args.CipherDir, err = filepath.Abs(flagSet.Arg(0))
+	if err != nil {
+		tlog.Fatal.Printf("Invalid cipherdir: %v", err)
+		os.Exit(exitcode.CipherDir)
+	}
+	if err = checkDir(args.CipherDir); err != nil {
+		tlog.Fatal.Printf("Invalid cipherdir: %v", err)
+		os.Exit(exitcode.CipherDir)
+	}
+	args.MountPoint, err = filepath.Abs(flagSet.Arg(1))
+	if err != nil {
+		tlog.Fatal.Printf("Invalid mountpoint: %v", err)
+		os.Exit(exitcode.MountPoint)
+	}
+	if err = checkDirEmpty(args.MountPoint); err != nil {
+		tlog.Fatal.Printf("Invalid mountpoint: %v", err)
+		os.Exit(exitcode.MountPoint)
+	}
 
 	return args
 }
@@ -279,4 +298,32 @@ func expandPath(path string) string {
 		return path
 	}
 	return filepath.Join(usr.HomeDir, path[1:])
+}
+
+// checkDirEmpty - check if "dir" exists and is an empty directory
+func checkDirEmpty(dir string) error {
+	err := checkDir(dir)
+	if err != nil {
+		return err
+	}
+	entries, err := ioutil.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	if len(entries) == 0 {
+		return nil
+	}
+	return fmt.Errorf("directory %s not empty", dir)
+}
+
+// checkDir - check if "dir" exists and is a directory
+func checkDir(dir string) error {
+	fi, err := os.Stat(dir)
+	if err != nil {
+		return err
+	}
+	if !fi.IsDir() {
+		return fmt.Errorf("%s is not a directory", dir)
+	}
+	return nil
 }
