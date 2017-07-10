@@ -9,7 +9,10 @@ import (
 
 	"path/filepath"
 
+	"errors"
+
 	"github.com/Declan94/cfcryptfs/internal/corecrypter"
+	"github.com/Declan94/cfcryptfs/internal/tlog"
 )
 
 // NameCrypter used for encrypt and decrypt filenames
@@ -54,6 +57,10 @@ func (nc *NameCrypter) DecryptName(name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if len(cipher) <= md5.Size {
+		tlog.Warn.Printf("Encrypted filename too short!")
+		return "", errors.New("invalid filename")
+	}
 	plain := make([]byte, len(cipher)-md5.Size)
 	nc.AesCrypter.Decrypt(plain, cipher)
 	return string(plain), nil
@@ -90,4 +97,29 @@ func (nc *NameCrypter) DecryptPath(path string) (string, error) {
 		plainPath = filepath.Join(plainPath, plainName)
 	}
 	return plainPath, nil
+}
+
+// EncryptLink encrypt the filepath for symbol link
+//	use encryption like content crypt do avoid leak information of the plain filename
+func (nc *NameCrypter) EncryptLink(path string) string {
+	src := []byte(path)
+	len := nc.AesCrypter.LenAfterEncrypted(len(src))
+	dest := make([]byte, len)
+	nc.AesCrypter.Encrypt(dest, src)
+	return base64.URLEncoding.EncodeToString(dest)
+}
+
+// DecryptLink decrypt the filepath for symbol link
+func (nc *NameCrypter) DecryptLink(cpath string) (string, error) {
+	src, err := base64.URLEncoding.DecodeString(cpath)
+	if err != nil {
+		return "", err
+	}
+	len := nc.AesCrypter.LenAfterDecrypted(len(src))
+	dest := make([]byte, len)
+	err = nc.AesCrypter.Decrypt(dest, src)
+	if err != nil {
+		return "", err
+	}
+	return string(dest), nil
 }

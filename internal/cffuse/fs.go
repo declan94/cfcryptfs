@@ -149,8 +149,6 @@ func (fs *CfcryptFS) GetAttr(path string, context *fuse.Context) (*fuse.Attr, fu
 		}
 		status = f.GetAttr(a)
 		f.Release()
-	} else if a.IsSymlink() {
-		// not implemented now
 	}
 	return a, status
 }
@@ -159,6 +157,7 @@ func (fs *CfcryptFS) GetAttr(path string, context *fuse.Context) (*fuse.Attr, fu
 func (fs *CfcryptFS) OpenDir(path string, context *fuse.Context) (stream []fuse.DirEntry, status fuse.Status) {
 	// What other ways beyond O_RDONLY are there to open
 	// directories?
+	tlog.Debug.Printf("CfcryptFS.OpenDir('%s')", path)
 	f, err := os.Open(fs.getUnderlyingPath(path))
 	if err != nil {
 		return nil, fuse.ToStatus(err)
@@ -202,6 +201,7 @@ func (fs *CfcryptFS) OpenDir(path string, context *fuse.Context) (stream []fuse.
 
 // StatFs fuse implemention
 func (fs *CfcryptFS) StatFs(name string) *fuse.StatfsOut {
+	tlog.Debug.Printf("CfcryptFS.StatFs('%s')", name)
 	s := syscall.Statfs_t{}
 	err := syscall.Statfs(fs.getUnderlyingPath(name), &s)
 	if err == nil {
@@ -213,15 +213,17 @@ func (fs *CfcryptFS) StatFs(name string) *fuse.StatfsOut {
 }
 
 // Symlink fuse implemention
-// todo
 func (fs *CfcryptFS) Symlink(pointedTo string, linkName string, context *fuse.Context) (code fuse.Status) {
-	return fuse.ToStatus(os.Symlink(pointedTo, fs.getUnderlyingPath(linkName)))
+	return fuse.ToStatus(os.Symlink(fs.nameCrypt.EncryptLink(pointedTo), fs.getUnderlyingPath(linkName)))
 }
 
 // Readlink fuse implemention
-// todo
 func (fs *CfcryptFS) Readlink(name string, context *fuse.Context) (out string, code fuse.Status) {
 	f, err := os.Readlink(fs.getUnderlyingPath(name))
+	if err != nil {
+		return "", fuse.ToStatus(err)
+	}
+	f, err = fs.nameCrypt.DecryptLink(f)
 	return f, fuse.ToStatus(err)
 }
 
@@ -259,27 +261,33 @@ func (fs *CfcryptFS) Link(orig string, newName string, context *fuse.Context) (c
 
 // Access fuse implemention
 func (fs *CfcryptFS) Access(name string, mode uint32, context *fuse.Context) (code fuse.Status) {
+	tlog.Debug.Printf("CfcryptFS.Access('%s')", name)
 	return fuse.ToStatus(syscall.Access(fs.getUnderlyingPath(name), mode))
 }
 
 // ListXAttr fuse implemention
 func (fs *CfcryptFS) ListXAttr(name string, context *fuse.Context) ([]string, fuse.Status) {
-	return fs.FileSystem.ListXAttr(fs.nameCrypt.EncryptPath(name), context)
+	return nil, fuse.ENOSYS
+	// return fs.FileSystem.ListXAttr(fs.nameCrypt.EncryptPath(name), context)
 }
 
 // RemoveXAttr fuse implemention
 func (fs *CfcryptFS) RemoveXAttr(name string, attr string, context *fuse.Context) fuse.Status {
-	return fs.FileSystem.RemoveXAttr(fs.nameCrypt.EncryptPath(name), attr, context)
+	return fuse.ENOSYS
+	// return fs.FileSystem.RemoveXAttr(fs.nameCrypt.EncryptPath(name), attr, context)
 }
 
 // GetXAttr fuse implemention
 func (fs *CfcryptFS) GetXAttr(name string, attr string, context *fuse.Context) ([]byte, fuse.Status) {
-	return fs.FileSystem.GetXAttr(fs.nameCrypt.EncryptPath(name), attr, context)
+	return nil, fuse.ENOSYS
+	// directly call loopback filesystem's implemention will cause problems in symbol link files
+	// return fs.FileSystem.GetXAttr(fs.nameCrypt.EncryptPath(name), attr, context)
 }
 
 // SetXAttr fuse implemention
 func (fs *CfcryptFS) SetXAttr(name string, attr string, data []byte, flags int, context *fuse.Context) fuse.Status {
-	return fs.FileSystem.SetXAttr(fs.nameCrypt.EncryptPath(name), attr, data, flags, context)
+	return fuse.ENOSYS
+	// return fs.FileSystem.SetXAttr(fs.nameCrypt.EncryptPath(name), attr, data, flags, context)
 }
 
 // Utimens - path based version of loopbackFile.Utimens()

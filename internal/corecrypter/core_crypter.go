@@ -14,7 +14,7 @@ type CoreCrypter interface {
 	// Encrypt encrypt src to dest
 	Encrypt(dest, src []byte)
 	// Decrypt decrypt src to dest
-	Decrypt(dest, src []byte)
+	Decrypt(dest, src []byte) error
 }
 
 // RandBytes gets "n" random bytes from /dev/urandom or panics

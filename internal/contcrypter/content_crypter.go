@@ -101,9 +101,9 @@ func (cc *ContentCrypter) decryptBlock(cipher []byte, blockNo uint64, fileID []b
 	}
 	// decrypt cipherdata
 	pBlock := cc.pBlockPool.Get()
-	cc.core.Decrypt(pBlock, cipherDataBlock)
+	err := cc.core.Decrypt(pBlock, cipherDataBlock)
 	pBlock = pBlock[:cc.core.LenAfterDecrypted(len(cipherDataBlock))]
-	return pBlock, nil
+	return pBlock, err
 }
 
 // EncryptBlocks encrypt multiple continuous plain blocks

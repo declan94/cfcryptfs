@@ -3,6 +3,10 @@ package corecrypter
 import (
 	"crypto/aes"
 	"crypto/cipher"
+
+	"errors"
+
+	"github.com/Declan94/cfcryptfs/internal/tlog"
 )
 
 const (
@@ -44,6 +48,9 @@ func (ac *AesCrypter) LenAfterEncrypted(plainLen int) int {
 
 // LenAfterDecrypted decrypted info length given cipher with specific length
 func (ac *AesCrypter) LenAfterDecrypted(cipherLen int) int {
+	if cipherLen-ac.blockSize < 0 {
+		return 0
+	}
 	return cipherLen - ac.blockSize
 }
 
@@ -68,9 +75,10 @@ func (ac *AesCrypter) Encrypt(dest, src []byte) {
 }
 
 // Decrypt decrypt cipher
-func (ac *AesCrypter) Decrypt(dest, src []byte) {
+func (ac *AesCrypter) Decrypt(dest, src []byte) error {
 	if len(src) < ac.blockSize {
-		panic("ciphertext too short")
+		tlog.Warn.Printf("ciphertext too short")
+		return errors.New("Ciphertext too short")
 	}
 	iv := src[:ac.blockSize]
 	if len(src)%ac.blockSize == 0 {
@@ -80,4 +88,5 @@ func (ac *AesCrypter) Decrypt(dest, src []byte) {
 		stream := cipher.NewCFBDecrypter(ac.cipherBlock, iv)
 		stream.XORKeyStream(dest, src[ac.blockSize:])
 	}
+	return nil
 }
