@@ -3,52 +3,55 @@ package cffuse
 // FUSE operations on paths
 
 import (
+	"fmt"
+	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/Declan94/cfcryptfs/internal/contcrypter"
 	"github.com/Declan94/cfcryptfs/internal/corecrypter"
+	"github.com/Declan94/cfcryptfs/internal/namecrypter"
 	"github.com/Declan94/cfcryptfs/internal/tlog"
 	"github.com/hanwen/go-fuse/fuse"
 	"github.com/hanwen/go-fuse/fuse/nodefs"
 	"github.com/hanwen/go-fuse/fuse/pathfs"
 )
 
-// FS implements the go-fuse virtual filesystem interface.
-type FS struct {
-	pathfs.FileSystem // loopbackFileSystem, see go-fuse/fuse/pathfs/loopback.go
+// CfcryptFS implements the go-fuse virtual filesystem interface.
+type CfcryptFS struct {
+	pathfs.FileSystem // CfcryptFS, see go-fuse/fuse/pathfs/loopback.go
 	configs           FsConfig
-	contentEnc        *contcrypter.ContentCrypter
+	contentCrypt      *contcrypter.ContentCrypter
+	nameCrypt         *namecrypter.NameCrypter
 	backingFileMode   uint32
 }
 
-var _ pathfs.FileSystem = &FS{} // Verify that interface is implemented.
+var _ pathfs.FileSystem = &CfcryptFS{} // Verify that interface is implemented.
 
 // NewFS returns a new encrypted FUSE overlay filesystem.
-func NewFS(confs FsConfig) *FS {
+func NewFS(confs FsConfig) *CfcryptFS {
 	core := corecrypter.NewCoreCrypter(confs.CryptType, confs.CryptKey)
-	contEnc := contcrypter.NewContentCrypter(core, confs.PlainBS)
-	return &FS{
+	return &CfcryptFS{
 		FileSystem:      pathfs.NewLoopbackFileSystem(confs.CipherDir),
 		configs:         confs,
 		backingFileMode: 0600,
-		contentEnc:      contEnc,
+		contentCrypt:    contcrypter.NewContentCrypter(core, confs.PlainBS),
+		nameCrypt:       namecrypter.NewNameCrypter(confs.CryptKey),
 	}
 }
 
 // Create implements pathfs.Filesystem.
-func (fs *FS) Create(path string, flags uint32, mode uint32, context *fuse.Context) (fuseFile nodefs.File, code fuse.Status) {
+func (fs *CfcryptFS) Create(path string, flags uint32, mode uint32, context *fuse.Context) (fuseFile nodefs.File, code fuse.Status) {
 
-	tlog.Debug.Printf("FS.Create(%s, %d, %d)", path, flags, mode)
+	tlog.Debug.Printf("CfcryptFS.Create(%s, %d, %d)", path, flags, mode)
 	newFlags := fs.mangleOpenFlags(flags)
-	cPath, err := fs.getBackingPath(path)
-	if err != nil {
-		return nil, fuse.ToStatus(err)
-	}
+	cPath := fs.getUnderlyingPath(path)
 	var fd *os.File
 	// Create backing file
-	fd, err = os.OpenFile(cPath, newFlags|os.O_CREATE, os.FileMode(fs.backingFileMode))
+	fd, err := os.OpenFile(cPath, newFlags|os.O_CREATE, os.FileMode(fs.backingFileMode))
 	if err != nil {
 		return nil, fuse.ToStatus(err)
 	}
@@ -66,14 +69,10 @@ func (fs *FS) Create(path string, flags uint32, mode uint32, context *fuse.Conte
 }
 
 // Open implements pathfs.Filesystem.
-func (fs *FS) Open(path string, flags uint32, context *fuse.Context) (fuseFile nodefs.File, status fuse.Status) {
+func (fs *CfcryptFS) Open(path string, flags uint32, context *fuse.Context) (fuseFile nodefs.File, status fuse.Status) {
 	newFlags := fs.mangleOpenFlags(flags)
-	cPath, err := fs.getBackingPath(path)
-	if err != nil {
-		tlog.Debug.Printf("Open: getBackingPath: %v", err)
-		return nil, fuse.ToStatus(err)
-	}
-	tlog.Debug.Printf("FS.Open: %s, %d", cPath, flags)
+	cPath := fs.getUnderlyingPath(path)
+	tlog.Debug.Printf("CfcryptFS.Open: %s, %d", cPath, flags)
 	f, err := os.OpenFile(cPath, newFlags, 0666)
 	if err != nil {
 		tlog.Debug.Printf("Open Failed: %s\n", err)
@@ -90,10 +89,10 @@ func (fs *FS) Open(path string, flags uint32, context *fuse.Context) (fuseFile n
 }
 
 // Chmod implements pathfs.Filesystem.
-func (fs *FS) Chmod(path string, mode uint32, context *fuse.Context) (code fuse.Status) {
+func (fs *CfcryptFS) Chmod(path string, mode uint32, context *fuse.Context) (code fuse.Status) {
 	a, status := fs.FileSystem.GetAttr(path, context)
 	if a == nil {
-		tlog.Debug.Printf("FS.GetAttr failed: %s", status.String())
+		tlog.Debug.Printf("CfcryptFS.GetAttr failed: %s", status.String())
 		return status
 	}
 	if a.IsRegular() {
@@ -104,23 +103,28 @@ func (fs *FS) Chmod(path string, mode uint32, context *fuse.Context) (code fuse.
 		status = f.Chmod(mode)
 		f.Release()
 	} else {
-		cPath, err := fs.getBackingPath(path)
-		if err != nil {
-			return fuse.ToStatus(err)
-		}
-		err = syscall.Chmod(cPath, mode)
+		cPath := fs.getUnderlyingPath(path)
+		err := syscall.Chmod(cPath, mode)
 		status = fuse.ToStatus(err)
 	}
 
 	return status
 }
 
-// Chown implements pathfs.Filesystem.
-func (fs *FS) Chown(path string, uid uint32, gid uint32, context *fuse.Context) (code fuse.Status) {
-	cPath, err := fs.getBackingPath(path)
-	if err != nil {
-		return fuse.ToStatus(err)
+// Truncate fuse implemention
+func (fs *CfcryptFS) Truncate(path string, offset uint64, context *fuse.Context) (code fuse.Status) {
+	file, code := fs.Open(path, uint32(os.O_RDWR), context)
+	if code != fuse.OK {
+		return code
 	}
+	code = file.Truncate(offset)
+	file.Release()
+	return code
+}
+
+// Chown implements pathfs.Filesystem.
+func (fs *CfcryptFS) Chown(path string, uid uint32, gid uint32, context *fuse.Context) (code fuse.Status) {
+	cPath := fs.getUnderlyingPath(path)
 	code = fuse.ToStatus(os.Lchown(cPath, int(uid), int(gid)))
 	if !code.Ok() {
 		return code
@@ -129,11 +133,13 @@ func (fs *FS) Chown(path string, uid uint32, gid uint32, context *fuse.Context) 
 }
 
 // GetAttr implements pathfs.Filesystem.
-func (fs *FS) GetAttr(path string, context *fuse.Context) (*fuse.Attr, fuse.Status) {
-	tlog.Debug.Printf("FS.GetAttr('%s')", path)
-	a, status := fs.FileSystem.GetAttr(path, context)
+func (fs *CfcryptFS) GetAttr(path string, context *fuse.Context) (*fuse.Attr, fuse.Status) {
+	tlog.Debug.Printf("CfcryptFS.GetAttr('%s')", path)
+	cpath := fs.nameCrypt.EncryptPath(path)
+	tlog.Debug.Printf("Ecrypted path: %s", cpath)
+	a, status := fs.FileSystem.GetAttr(cpath, context)
 	if a == nil {
-		tlog.Debug.Printf("FS.GetAttr failed: %s", status.String())
+		tlog.Debug.Printf("CfcryptFS.GetAttr failed: %s", status.String())
 		return a, status
 	}
 	if a.IsRegular() {
@@ -149,9 +155,147 @@ func (fs *FS) GetAttr(path string, context *fuse.Context) (*fuse.Attr, fuse.Stat
 	return a, status
 }
 
+// OpenDir fuse implemention
+func (fs *CfcryptFS) OpenDir(path string, context *fuse.Context) (stream []fuse.DirEntry, status fuse.Status) {
+	// What other ways beyond O_RDONLY are there to open
+	// directories?
+	f, err := os.Open(fs.getUnderlyingPath(path))
+	if err != nil {
+		return nil, fuse.ToStatus(err)
+	}
+	want := 500
+	output := make([]fuse.DirEntry, 0, want)
+	for {
+		infos, err := f.Readdir(want)
+		for i := range infos {
+			// workaround forhttps://code.google.com/p/go/issues/detail?id=5960
+			if infos[i] == nil {
+				continue
+			}
+			n, err := fs.nameCrypt.DecryptName(infos[i].Name())
+			if err != nil {
+				tlog.Warn.Printf("Invalid filename: %s", infos[i].Name())
+				continue
+			}
+			d := fuse.DirEntry{
+				Name: n,
+			}
+			if s := fuse.ToStatT(infos[i]); s != nil {
+				d.Mode = uint32(s.Mode)
+			} else {
+				log.Printf("ReadDir entry %q for %q has no stat info", n, path)
+			}
+			output = append(output, d)
+		}
+		if len(infos) < want || err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Println("Readdir() returned err:", err)
+			break
+		}
+	}
+	f.Close()
+
+	return output, fuse.OK
+}
+
+// StatFs fuse implemention
+func (fs *CfcryptFS) StatFs(name string) *fuse.StatfsOut {
+	s := syscall.Statfs_t{}
+	err := syscall.Statfs(fs.getUnderlyingPath(name), &s)
+	if err == nil {
+		out := &fuse.StatfsOut{}
+		out.FromStatfsT(&s)
+		return out
+	}
+	return nil
+}
+
+// Symlink fuse implemention
+// todo
+func (fs *CfcryptFS) Symlink(pointedTo string, linkName string, context *fuse.Context) (code fuse.Status) {
+	return fuse.ToStatus(os.Symlink(pointedTo, fs.getUnderlyingPath(linkName)))
+}
+
+// Readlink fuse implemention
+// todo
+func (fs *CfcryptFS) Readlink(name string, context *fuse.Context) (out string, code fuse.Status) {
+	f, err := os.Readlink(fs.getUnderlyingPath(name))
+	return f, fuse.ToStatus(err)
+}
+
+// Mknod fuse implemention
+func (fs *CfcryptFS) Mknod(name string, mode uint32, dev uint32, context *fuse.Context) (code fuse.Status) {
+	return fuse.ToStatus(syscall.Mknod(fs.getUnderlyingPath(name), mode, int(dev)))
+}
+
+// Mkdir fuse implemention
+func (fs *CfcryptFS) Mkdir(path string, mode uint32, context *fuse.Context) (code fuse.Status) {
+	return fuse.ToStatus(os.Mkdir(fs.getUnderlyingPath(path), os.FileMode(mode)))
+}
+
+// Unlink fuse implemention
+// Don't use os.Remove, it removes twice (unlink followed by rmdir).
+func (fs *CfcryptFS) Unlink(name string, context *fuse.Context) (code fuse.Status) {
+	return fuse.ToStatus(syscall.Unlink(fs.getUnderlyingPath(name)))
+}
+
+// Rmdir fuse implemention
+func (fs *CfcryptFS) Rmdir(name string, context *fuse.Context) (code fuse.Status) {
+	return fuse.ToStatus(syscall.Rmdir(fs.getUnderlyingPath(name)))
+}
+
+// Rename fuse implemention
+func (fs *CfcryptFS) Rename(oldPath string, newPath string, context *fuse.Context) (codee fuse.Status) {
+	err := os.Rename(fs.getUnderlyingPath(oldPath), fs.getUnderlyingPath(newPath))
+	return fuse.ToStatus(err)
+}
+
+// Link fuse implemention
+func (fs *CfcryptFS) Link(orig string, newName string, context *fuse.Context) (code fuse.Status) {
+	return fuse.ToStatus(os.Link(fs.getUnderlyingPath(orig), fs.getUnderlyingPath(newName)))
+}
+
+// Access fuse implemention
+func (fs *CfcryptFS) Access(name string, mode uint32, context *fuse.Context) (code fuse.Status) {
+	return fuse.ToStatus(syscall.Access(fs.getUnderlyingPath(name), mode))
+}
+
+// ListXAttr fuse implemention
+func (fs *CfcryptFS) ListXAttr(name string, context *fuse.Context) ([]string, fuse.Status) {
+	return fs.FileSystem.ListXAttr(fs.nameCrypt.EncryptPath(name), context)
+}
+
+// RemoveXAttr fuse implemention
+func (fs *CfcryptFS) RemoveXAttr(name string, attr string, context *fuse.Context) fuse.Status {
+	return fs.FileSystem.RemoveXAttr(fs.nameCrypt.EncryptPath(name), attr, context)
+}
+
+// GetXAttr fuse implemention
+func (fs *CfcryptFS) GetXAttr(name string, attr string, context *fuse.Context) ([]byte, fuse.Status) {
+	return fs.FileSystem.GetXAttr(fs.nameCrypt.EncryptPath(name), attr, context)
+}
+
+// SetXAttr fuse implemention
+func (fs *CfcryptFS) SetXAttr(name string, attr string, data []byte, flags int, context *fuse.Context) fuse.Status {
+	return fs.FileSystem.SetXAttr(fs.nameCrypt.EncryptPath(name), attr, data, flags, context)
+}
+
+// Utimens - path based version of loopbackFile.Utimens()
+func (fs *CfcryptFS) Utimens(path string, a *time.Time, m *time.Time, context *fuse.Context) (code fuse.Status) {
+	return fs.FileSystem.Utimens(fs.nameCrypt.EncryptPath(path), a, m, context)
+}
+
+func (fs *CfcryptFS) String() string {
+	return fmt.Sprintf("Cfcryptfs(%s)", fs.configs.CipherDir)
+}
+
+//  ------------------------------------ Support Funcs --------------------------------------
+
 // mangleOpenFlags is used by Create() and Open() to convert the open flags the user
 // wants to the flags we internally use to open the backing file.
-func (fs *FS) mangleOpenFlags(flags uint32) (newFlags int) {
+func (fs *CfcryptFS) mangleOpenFlags(flags uint32) (newFlags int) {
 	newFlags = int(flags)
 	// Convert WRONLY to RDWR. We always need read access to do read-modify-write cycles.
 	if newFlags&os.O_WRONLY > 0 {
@@ -163,11 +307,10 @@ func (fs *FS) mangleOpenFlags(flags uint32) (newFlags int) {
 	return newFlags
 }
 
-// GetBackingPath - get the absolute encrypted path of the backing file
+// getUnderlyingPath - get the absolute encrypted path of the backing file
 // from the relative plaintext path "relPath"
-func (fs *FS) getBackingPath(relPath string) (string, error) {
-	// currently not encrypt path
-	// wait to do later
+func (fs *CfcryptFS) getUnderlyingPath(relPath string) string {
+	relPath = fs.nameCrypt.EncryptPath(relPath)
 	cAbsPath := filepath.Join(fs.configs.CipherDir, relPath)
-	return cAbsPath, nil
+	return cAbsPath
 }

@@ -60,7 +60,7 @@ type file struct {
 	// guaranteed to be correct.
 	lastOpCount uint64
 	// Parent filesystem
-	fs *FS
+	fs *CfcryptFS
 	// We embed a nodefs.NewDefaultFile() that returns ENOSYS for every operation we
 	// have not implemented. This prevents build breakage when the go-fuse library
 	// adds new methods to the nodefs.File interface.
@@ -68,7 +68,7 @@ type file struct {
 }
 
 // NewFile returns a new go-fuse File instance.
-func newFile(fd *os.File, fs *FS) (*file, fuse.Status) {
+func newFile(fd *os.File, fs *CfcryptFS) (*file, fuse.Status) {
 	var st syscall.Stat_t
 	err := syscall.Fstat(int(fd.Fd()), &st)
 	if err != nil {
@@ -85,7 +85,7 @@ func newFile(fd *os.File, fs *FS) (*file, fuse.Status) {
 	ent := enttable.register(qi)
 	f := &file{
 		fd:           fd,
-		contentEnc:   fs.contentEnc,
+		contentEnc:   fs.contentCrypt,
 		qIno:         qi,
 		ent:          ent,
 		loopbackFile: nodefs.NewLoopbackFile(fd),
@@ -176,7 +176,7 @@ func (f *file) read(off uint64, length int) ([]byte, fuse.Status) {
 	// Read the backing ciphertext in one go
 	skip, alignedOffset, alignedLength := f.contentEnc.TransformPlainRange(off, length)
 	tlog.Debug.Printf("TransformRange(%d, %d) -> %d, %d, %d", off, length, alignedOffset, alignedLength, skip)
-	ciphertext := f.fs.contentEnc.CReqPool.Get()
+	ciphertext := f.fs.contentCrypt.CReqPool.Get()
 	ciphertext = ciphertext[:int(alignedLength)]
 	n, err := f.fd.ReadAt(ciphertext, int64(alignedOffset))
 	f.ent.headerLock.RUnlock()
@@ -187,7 +187,7 @@ func (f *file) read(off uint64, length int) ([]byte, fuse.Status) {
 	}
 	// The ReadAt came back empty. We can skip all the decryption and return early.
 	if n == 0 {
-		f.fs.contentEnc.CReqPool.Put(ciphertext)
+		f.fs.contentCrypt.CReqPool.Put(ciphertext)
 		return nil, fuse.OK
 	}
 	// Truncate ciphertext buffer down to actually read bytes
@@ -198,7 +198,7 @@ func (f *file) read(off uint64, length int) ([]byte, fuse.Status) {
 
 	// Decrypt it
 	plaintext, err := f.contentEnc.DecryptBlocks(ciphertext, firstBlockNo, fileID)
-	f.fs.contentEnc.CReqPool.Put(ciphertext)
+	f.fs.contentCrypt.CReqPool.Put(ciphertext)
 	if err != nil {
 		curruptBlockNo := firstBlockNo + f.contentEnc.PlainOffToBlockNo(uint64(len(plaintext)))
 		tlog.Warn.Printf("ino%d: doRead: corrupt block #%d: %v", f.qIno.Ino, curruptBlockNo, err)
@@ -216,7 +216,7 @@ func (f *file) read(off uint64, length int) ([]byte, fuse.Status) {
 	}
 	// else: out stays empty, file was smaller than the requested offset
 
-	f.fs.contentEnc.PReqPool.Put(plaintext)
+	f.fs.contentCrypt.PReqPool.Put(plaintext)
 
 	return out, fuse.OK
 }
@@ -318,7 +318,7 @@ func (f *file) write(data []byte, off int64) (uint32, fuse.Status) {
 	// Write
 	_, err = f.fd.WriteAt(ciphertext, cOff)
 	// Return memory to CReqPool
-	f.fs.contentEnc.CReqPool.Put(ciphertext)
+	f.fs.contentCrypt.CReqPool.Put(ciphertext)
 	if err != nil {
 		tlog.Warn.Printf("write: Write failed: %s", err.Error())
 		return 0, fuse.ToStatus(err)

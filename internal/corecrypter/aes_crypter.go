@@ -3,8 +3,6 @@ package corecrypter
 import (
 	"crypto/aes"
 	"crypto/cipher"
-	"crypto/rand"
-	"io"
 )
 
 const (
@@ -49,15 +47,9 @@ func (ac *AesCrypter) LenAfterDecrypted(cipherLen int) int {
 	return cipherLen - ac.blockSize
 }
 
-// Encrypt encrypt plain
-// It's important to remember that ciphertexts must be authenticated
-// (i.e. by using crypto/hmac) as well as being encrypted in order to be secure.
-// authentication will be down outside cryptor, to include file ID and block No.
-func (ac *AesCrypter) Encrypt(dest, src []byte) {
-	iv := dest[:ac.blockSize]
-	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
-		panic(err)
-	}
+// EncryptWithIV encrypt plain using given IV
+func (ac *AesCrypter) EncryptWithIV(dest, src []byte, iv []byte) {
+	copy(dest[:ac.blockSize], iv[:ac.blockSize])
 	if len(src)%ac.blockSize == 0 {
 		crypt := cipher.NewCBCEncrypter(ac.cipherBlock, iv)
 		crypt.CryptBlocks(dest[ac.blockSize:], src)
@@ -65,6 +57,14 @@ func (ac *AesCrypter) Encrypt(dest, src []byte) {
 		stream := cipher.NewCFBEncrypter(ac.cipherBlock, iv)
 		stream.XORKeyStream(dest[ac.blockSize:], src)
 	}
+}
+
+// Encrypt encrypt plain
+// It's important to remember that ciphertexts must be authenticated
+// (i.e. by using crypto/hmac) as well as being encrypted in order to be secure.
+// authentication will be down outside cryptor, to include file ID and block No.
+func (ac *AesCrypter) Encrypt(dest, src []byte) {
+	ac.EncryptWithIV(dest, src, RandBytes(ac.blockSize))
 }
 
 // Decrypt decrypt cipher
