@@ -9,9 +9,13 @@ import (
 	"path"
 	"path/filepath"
 
+	"strings"
+
 	"github.com/Declan94/cfcryptfs/internal/exitcode"
 	"github.com/Declan94/cfcryptfs/internal/tlog"
 )
+
+var flagSet *flag.FlagSet
 
 // Args contains cli args value
 type Args struct {
@@ -19,30 +23,50 @@ type Args struct {
 	mountPoint string
 	pwdFile    string
 	debugFuse  bool
+	debug      bool
 	init       bool
 	foreground bool
 	allowOther bool
+	parentPid  int
+}
+
+func printMyFlagSet(avoid map[string]bool) {
+	flagSet.VisitAll(func(f *flag.Flag) {
+		if avoid[f.Name] {
+			return
+		}
+		s := fmt.Sprintf("  -%s", f.Name) // Two spaces before -; see next two comments.
+		_, usage := flag.UnquoteUsage(f)
+		// Boolean flags of one ASCII letter are so common we
+		// treat them specially, putting their usage on the same line.
+		s += "\n    \t"
+		s += strings.Replace(usage, "\n", "\n    \t", -1)
+		fmt.Println(s)
+	})
 }
 
 func usage() {
 	fmt.Printf("Usage: %s [options] CIPHERDIR MOUNTPOINT\n", path.Base(os.Args[0]))
 	fmt.Printf("   or: %s -init CIPHERDIR\n", path.Base(os.Args[0]))
 	fmt.Printf("\noptions:\n")
-	flagSet.PrintDefaults()
+	printMyFlagSet(map[string]bool{
+		"debug":      true,
+		"parent_pid": true,
+	})
 	os.Exit(exitcode.Usage)
 }
-
-var flagSet *flag.FlagSet
 
 // parseArgs parse args from cli args
 func parseArgs() (args Args) {
 	flagSet = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 
-	flagSet.StringVar(&args.pwdFile, "passfile", "", "Password file path. You will need to type password in cli if not specify this option.")
+	flagSet.StringVar(&args.pwdFile, "passfile", "", "Password file path. \nYou will need to type password in cli if not specify this option.")
 	flagSet.BoolVar(&args.debugFuse, "debugfuse", false, "Show fuse debug messages.")
 	flagSet.BoolVar(&args.init, "init", false, "Initialize a cipher directory.")
 	flagSet.BoolVar(&args.foreground, "f", false, "Run in foreground.")
-	flagSet.BoolVar(&args.allowOther, "allow_other", false, "Allow other users to access the filesystem. Only works if user_allow_other is set in /etc/fuse.conf.")
+	flagSet.BoolVar(&args.allowOther, "allow_other", false, "Allow other users to access the filesystem. \nOnly works if user_allow_other is set in /etc/fuse.conf.")
+	flagSet.BoolVar(&args.debug, "debug", false, "Debug mode - internal use")
+	flagSet.IntVar(&args.parentPid, "parent_pid", 0, "Parent process pid - internal use")
 
 	flagSet.Usage = usage
 	flagSet.Parse(os.Args[1:])

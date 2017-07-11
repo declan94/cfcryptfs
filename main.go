@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log/syslog"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -24,6 +25,10 @@ func main() {
 	if args.init {
 		initCipherDir(args.cipherDir)
 		return
+	}
+
+	if !args.foreground {
+		os.Exit(forkChild())
 	}
 
 	conf := loadConf(args.cipherDir)
@@ -85,6 +90,25 @@ func main() {
 	// This prevents a dangling "Transport endpoint is not connected"
 	// mountpoint if the user hits CTRL-C.
 	handleSigint(srv, args.mountPoint)
+
+	if args.parentPid > 0 {
+		// Chdir to the root directory so we don't block unmounting the CWD
+		os.Chdir("/")
+		// Switch all of our logs and the generic logger to syslog
+		tlog.Info.SwitchToSyslog(syslog.LOG_USER | syslog.LOG_INFO)
+		tlog.Debug.SwitchToSyslog(syslog.LOG_USER | syslog.LOG_DEBUG)
+		tlog.Warn.SwitchToSyslog(syslog.LOG_USER | syslog.LOG_WARNING)
+		tlog.SwitchLoggerToSyslog(syslog.LOG_USER | syslog.LOG_WARNING)
+		// Disconnect from the controlling terminal by creating a new session.
+		// This prevents us from getting SIGINT when the user presses Ctrl-C
+		// to exit a running script that has called cfcryptfs.
+		_, err = syscall.Setsid()
+		if err != nil {
+			tlog.Warn.Printf("Setsid failed: %v", err)
+		}
+		// Send SIGUSR1 to our parent
+		sendUsr1(args.parentPid)
+	}
 
 	fmt.Println("Filesystem Mounted")
 	srv.Serve()
