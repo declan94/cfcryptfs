@@ -16,8 +16,11 @@ import (
 	"github.com/Declan94/cfcryptfs/readpwd"
 )
 
+const currentVersion = 0
+
 // CipherConfig is the content of a config file.
 type CipherConfig struct {
+	Version   int
 	KeyFile   string
 	CryptType int
 	PlainBS   int
@@ -27,6 +30,7 @@ type CipherConfig struct {
 func InitCipherDir(cipherDir string) {
 	var input string
 	var conf CipherConfig
+	conf.Version = currentVersion
 	for conf.CryptType == 0 {
 		fmt.Printf("Choose an encryption type (AES128/AES192/AES256): ")
 		input = ""
@@ -48,7 +52,12 @@ func InitCipherDir(cipherDir string) {
 
 // LoadConf load config of the cipher directory
 func LoadConf(cipherDir string) CipherConfig {
-	return loadConf(filepath.Join(cipherDir, cffuse.ConfFile))
+	conf := loadConf(filepath.Join(cipherDir, cffuse.ConfFile))
+	if conf.Version != currentVersion {
+		tlog.Fatal.Printf("Version not matched: cipherdir(%d) != current(%d)\n", conf.Version, currentVersion)
+		os.Exit(exitcode.Config)
+	}
+	return conf
 }
 
 // LoadKey load encryption key of the cipher directory
@@ -102,7 +111,6 @@ func generateKey(path string, cryptType int) {
 	}
 	var pwd string
 	for true {
-		fmt.Println("Enter a password for the key file.")
 		pwd, err = readpwd.Twice("")
 		if err != nil {
 			fmt.Println(err)
