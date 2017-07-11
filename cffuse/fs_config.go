@@ -16,4 +16,6 @@ type FsConfig struct {
 	BackingFileMode uint32
 	// AllowOther - allow other user to access the filesystem, must run as root user
 	AllowOther bool
+	// PlainPath - filepath stay plaintext (not encrypted)
+	PlainPath bool
 }

@@ -104,7 +104,7 @@ func (fs *CfcryptFS) Open(path string, flags uint32, context *fuse.Context) (fus
 
 // Chmod implements pathfs.Filesystem.
 func (fs *CfcryptFS) Chmod(path string, mode uint32, context *fuse.Context) (code fuse.Status) {
-	cpath := fs.nameCrypt.EncryptPath(path)
+	cpath := fs.encryptPath(path)
 	a, status := fs.FileSystem.GetAttr(cpath, context)
 	if a == nil {
 		tlog.Debug.Printf("CfcryptFS.GetAttr failed: %s", status.String())
@@ -150,7 +150,7 @@ func (fs *CfcryptFS) Chown(path string, uid uint32, gid uint32, context *fuse.Co
 // GetAttr implements pathfs.Filesystem.
 func (fs *CfcryptFS) GetAttr(path string, context *fuse.Context) (*fuse.Attr, fuse.Status) {
 	tlog.Debug.Printf("CfcryptFS.GetAttr('%s')", path)
-	cpath := fs.nameCrypt.EncryptPath(path)
+	cpath := fs.encryptPath(path)
 	tlog.Debug.Printf("Ecrypted path: %s", cpath)
 	a, status := fs.FileSystem.GetAttr(cpath, context)
 	if a == nil {
@@ -186,13 +186,16 @@ func (fs *CfcryptFS) OpenDir(path string, context *fuse.Context) (stream []fuse.
 			if infos[i] == nil {
 				continue
 			}
-			if IsNameReserved(infos[i].Name()) {
+			n := infos[i].Name()
+			if IsNameReserved(n) {
 				continue
 			}
-			n, err := fs.nameCrypt.DecryptName(infos[i].Name())
-			if err != nil {
-				tlog.Warn.Printf("Invalid filename: %s", infos[i].Name())
-				continue
+			if !fs.configs.PlainPath {
+				n, err = fs.nameCrypt.DecryptName(infos[i].Name())
+				if err != nil {
+					tlog.Warn.Printf("Invalid filename: %s", infos[i].Name())
+					continue
+				}
 			}
 			d := fuse.DirEntry{
 				Name: n,
@@ -315,31 +318,31 @@ func (fs *CfcryptFS) Access(name string, mode uint32, context *fuse.Context) (co
 // ListXAttr fuse implemention
 func (fs *CfcryptFS) ListXAttr(name string, context *fuse.Context) ([]string, fuse.Status) {
 	return nil, fuse.ENOSYS
-	// return fs.FileSystem.ListXAttr(fs.nameCrypt.EncryptPath(name), context)
+	// return fs.FileSystem.ListXAttr(fs.encryptPath(name), context)
 }
 
 // RemoveXAttr fuse implemention
 func (fs *CfcryptFS) RemoveXAttr(name string, attr string, context *fuse.Context) fuse.Status {
 	return fuse.ENOSYS
-	// return fs.FileSystem.RemoveXAttr(fs.nameCrypt.EncryptPath(name), attr, context)
+	// return fs.FileSystem.RemoveXAttr(fs.encryptPath(name), attr, context)
 }
 
 // GetXAttr fuse implemention
 func (fs *CfcryptFS) GetXAttr(name string, attr string, context *fuse.Context) ([]byte, fuse.Status) {
 	return nil, fuse.ENOSYS
 	// directly call loopback filesystem's implemention will cause problems in symbol link files
-	// return fs.FileSystem.GetXAttr(fs.nameCrypt.EncryptPath(name), attr, context)
+	// return fs.FileSystem.GetXAttr(fs.encryptPath(name), attr, context)
 }
 
 // SetXAttr fuse implemention
 func (fs *CfcryptFS) SetXAttr(name string, attr string, data []byte, flags int, context *fuse.Context) fuse.Status {
 	return fuse.ENOSYS
-	// return fs.FileSystem.SetXAttr(fs.nameCrypt.EncryptPath(name), attr, data, flags, context)
+	// return fs.FileSystem.SetXAttr(fs.encryptPath(name), attr, data, flags, context)
 }
 
 // Utimens - path based version of loopbackFile.Utimens()
 func (fs *CfcryptFS) Utimens(path string, a *time.Time, m *time.Time, context *fuse.Context) (code fuse.Status) {
-	return fs.FileSystem.Utimens(fs.nameCrypt.EncryptPath(path), a, m, context)
+	return fs.FileSystem.Utimens(fs.encryptPath(path), a, m, context)
 }
 
 func (fs *CfcryptFS) String() string {
@@ -362,10 +365,17 @@ func (fs *CfcryptFS) mangleOpenFlags(flags uint32) (newFlags int) {
 	return newFlags
 }
 
+func (fs *CfcryptFS) encryptPath(path string) string {
+	if fs.configs.PlainPath {
+		return path
+	}
+	return fs.nameCrypt.EncryptPath(path)
+}
+
 // getUnderlyingPath - get the absolute encrypted path of the backing file
 // from the relative plaintext path "relPath"
 func (fs *CfcryptFS) getUnderlyingPath(relPath string) string {
-	relPath = fs.nameCrypt.EncryptPath(relPath)
+	relPath = fs.encryptPath(relPath)
 	cAbsPath := filepath.Join(fs.configs.CipherDir, relPath)
 	return cAbsPath
 }

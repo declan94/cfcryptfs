@@ -24,6 +24,7 @@ type cipherConfig struct {
 	KeyFile   string
 	CryptType int
 	PlainBS   int
+	PlainPath bool
 }
 
 // initCipherDir initialize a cipher directory
@@ -37,9 +38,17 @@ func initCipherDir(cipherDir string) {
 		fmt.Scanln(&input)
 		conf.CryptType = str2CryptType(input)
 	}
-	fmt.Printf("Choose a block size(1: 2KB; 2: 4KB; 3: 8KB; 4:16KB): ")
-	fmt.Scanf("%d\n", &conf.PlainBS)
-	conf.PlainBS = blockSize(conf.PlainBS)
+	for conf.PlainBS == 0 {
+		fmt.Printf("Choose a block size(1: 2KB; 2: 4KB; 3: 8KB; 4:16KB): ")
+		fmt.Scanf("%d\n", &conf.PlainBS)
+		conf.PlainBS = blockSize(conf.PlainBS)
+	}
+
+	fmt.Printf("Whether encrypt filepath? (Y/n)")
+	input = ""
+	fmt.Scanln(&input)
+	input = strings.Trim(input, " \t")
+	conf.PlainPath = (strings.ToUpper(input) == "N")
 
 	generateKey(filepath.Join(cipherDir, cffuse.KeyFile), conf.CryptType)
 
@@ -165,6 +174,6 @@ func blockSize(index int) int {
 	case 4:
 		return 16 * 102
 	default:
-		return 4 * 1024
+		return 0
 	}
 }

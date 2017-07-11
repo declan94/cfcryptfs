@@ -8,7 +8,6 @@ import (
 	"os/user"
 	"path"
 	"path/filepath"
-
 	"strings"
 
 	"github.com/Declan94/cfcryptfs/internal/exitcode"
@@ -60,12 +59,12 @@ func usage() {
 func parseArgs() (args Args) {
 	flagSet = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 
-	flagSet.StringVar(&args.pwdFile, "passfile", "", "Password file path. \nYou will need to type password in cli if not specify this option.")
+	flagSet.StringVar(&args.pwdFile, "passfile", "", "Password file path.")
 	flagSet.BoolVar(&args.debugFuse, "debugfuse", false, "Show fuse debug messages.")
-	flagSet.BoolVar(&args.init, "init", false, "Initialize a cipher directory.")
-	flagSet.BoolVar(&args.foreground, "f", false, "Run in foreground.")
-	flagSet.BoolVar(&args.allowOther, "allow_other", false, "Allow other users to access the filesystem. \nOnly works if user_allow_other is set in /etc/fuse.conf.")
 	flagSet.BoolVar(&args.debug, "debug", false, "Debug mode - internal use")
+	flagSet.BoolVar(&args.init, "init", false, "Initialize a cipher directory.")
+	flagSet.BoolVar(&args.foreground, "f", false, "Run in the foreground.")
+	flagSet.BoolVar(&args.allowOther, "allow_other", false, "Allow other users to access the filesystem. \nOnly works if user_allow_other is set in /etc/fuse.conf.")
 	flagSet.IntVar(&args.parentPid, "parent_pid", 0, "Parent process pid - internal use")
 
 	flagSet.Usage = usage
@@ -112,6 +111,8 @@ func parseArgs() (args Args) {
 			os.Exit(exitcode.Usage)
 		}
 	}
+
+	tlog.Debug.Enabled = args.debug
 
 	return args
 }

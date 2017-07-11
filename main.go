@@ -43,10 +43,11 @@ func main() {
 	}
 	var fsConf = cffuse.FsConfig{
 		CipherDir:  args.cipherDir,
-		CryptType:  conf.CryptType,
-		CryptKey:   key,
-		PlainBS:    conf.PlainBS,
 		AllowOther: args.allowOther,
+		CryptKey:   key,
+		CryptType:  conf.CryptType,
+		PlainBS:    conf.PlainBS,
+		PlainPath:  conf.PlainPath,
 	}
 	var fs = cffuse.NewFS(fsConf, nil)
 	var finalFs pathfs.FileSystem
