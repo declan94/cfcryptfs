@@ -102,7 +102,11 @@ func loadKey(args *Args) {
 		tlog.Fatal.Printf("Read from key file failed: %v", err)
 		os.Exit(exitcode.KeyFile)
 	}
-	password, err := readpwd.Once(args.PwdFile)
+	extpwd := args.PwdFile
+	if extpwd != "" {
+		extpwd = "/bin/cat -- " + extpwd
+	}
+	password, err := readpwd.Once(extpwd)
 	if err != nil {
 		tlog.Fatal.Printf("Read password failed: %v", err)
 		os.Exit(exitcode.KeyFile)
