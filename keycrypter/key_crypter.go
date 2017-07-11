@@ -1,15 +1,12 @@
 package keycrypter
 
 import (
+	"bytes"
 	"crypto/md5"
 	"crypto/rand"
-	"io"
-
 	"encoding/binary"
-
 	"errors"
-
-	"bytes"
+	"io"
 
 	"github.com/Declan94/cfcryptfs/corecrypter"
 	"golang.org/x/crypto/scrypt"

@@ -22,10 +22,13 @@ import (
 func main() {
 	var args = parseArgs()
 
-	if args.GenConf || args.GenKey {
+	if args.Init {
+		InitCipherDir(args.CipherDir)
 		return
 	}
 
+	conf := LoadConf(args.CipherDir)
+	key := LoadKey(args.CipherDir, args.PwdFile)
 	// Check mountpoint
 	// We cannot mount "/home/user/.cipher" at "/home/user" because the mount
 	// will hide ".cipher" also for us.
@@ -36,9 +39,9 @@ func main() {
 	}
 	var fsConf = cffuse.FsConfig{
 		CipherDir: args.CipherDir,
-		CryptType: args.CryptType.int,
-		CryptKey:  args.Key,
-		PlainBS:   args.PlainBS,
+		CryptType: conf.CryptType,
+		CryptKey:  key,
+		PlainBS:   conf.PlainBS,
 	}
 	var fs = cffuse.NewFS(fsConf, nil)
 	var finalFs pathfs.FileSystem

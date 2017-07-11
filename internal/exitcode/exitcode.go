@@ -7,8 +7,8 @@ const (
 	Usage = 1
 	// 2 is reserved because it is used by Go panic
 
-	// ConfFile means open/read/parse conf file failed
-	ConfFile = 3 + iota
+	// Config means open/read/parse conf file failed
+	Config = 3 + iota
 	// KeyFile means open/read keyfile failed or invalid key len in keyfile
 	KeyFile
 	// CipherDir means that the CipherDir is invalid (not exist etc).
