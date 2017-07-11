@@ -18,30 +18,30 @@ import (
 
 const currentVersion = 0
 
-// CipherConfig is the content of a config file.
-type CipherConfig struct {
-	Version   int
-	KeyFile   string
-	CryptType int
-	PlainBS   int
+// cipherConfig is the content of a config file.
+type cipherConfig struct {
+	version   int
+	keyFile   string
+	cryptType int
+	plainBS   int
 }
 
-// InitCipherDir initialize a cipher directory
-func InitCipherDir(cipherDir string) {
+// initCipherDir initialize a cipher directory
+func initCipherDir(cipherDir string) {
 	var input string
-	var conf CipherConfig
-	conf.Version = currentVersion
-	for conf.CryptType == 0 {
+	var conf cipherConfig
+	conf.version = currentVersion
+	for conf.cryptType == 0 {
 		fmt.Printf("Choose an encryption type (AES128/AES192/AES256): ")
 		input = ""
 		fmt.Scanln(&input)
-		conf.CryptType = str2CryptType(input)
+		conf.cryptType = str2CryptType(input)
 	}
 	fmt.Printf("Choose a block size(1: 2KB; 2: 4KB; 3: 8KB; 4:16KB): ")
-	fmt.Scanf("%d\n", &conf.PlainBS)
-	conf.PlainBS = blockSize(conf.PlainBS)
+	fmt.Scanf("%d\n", &conf.plainBS)
+	conf.plainBS = blockSize(conf.plainBS)
 
-	generateKey(filepath.Join(cipherDir, cffuse.KeyFile), conf.CryptType)
+	generateKey(filepath.Join(cipherDir, cffuse.KeyFile), conf.cryptType)
 
 	err := saveConf(filepath.Join(cipherDir, cffuse.ConfFile), conf)
 	if err != nil {
@@ -50,18 +50,18 @@ func InitCipherDir(cipherDir string) {
 	}
 }
 
-// LoadConf load config of the cipher directory
-func LoadConf(cipherDir string) CipherConfig {
-	conf := loadConf(filepath.Join(cipherDir, cffuse.ConfFile))
-	if conf.Version != currentVersion {
-		tlog.Fatal.Printf("Version not matched: cipherdir(%d) != current(%d)\n", conf.Version, currentVersion)
+// loadConf load config of the cipher directory
+func loadConf(cipherDir string) cipherConfig {
+	conf := readConf(filepath.Join(cipherDir, cffuse.ConfFile))
+	if conf.version != currentVersion {
+		tlog.Fatal.Printf("Version not matched: cipherdir(%d) != current(%d)\n", conf.version, currentVersion)
 		os.Exit(exitcode.Config)
 	}
 	return conf
 }
 
-// LoadKey load encryption key of the cipher directory
-func LoadKey(cipherDir string, pwdfile string) []byte {
+// loadKey load encryption key of the cipher directory
+func loadKey(cipherDir string, pwdfile string) []byte {
 	key, err := keycrypter.LoadKey(filepath.Join(cipherDir, cffuse.KeyFile), pwdfile)
 	if err != nil {
 		tlog.Fatal.Println(err)
@@ -70,7 +70,7 @@ func LoadKey(cipherDir string, pwdfile string) []byte {
 	return key
 }
 
-func loadConf(path string) (cf CipherConfig) {
+func readConf(path string) (cf cipherConfig) {
 	// Read from disk
 	js, err := ioutil.ReadFile(path)
 	if err != nil {
@@ -86,7 +86,7 @@ func loadConf(path string) (cf CipherConfig) {
 	return
 }
 
-func saveConf(path string, cf CipherConfig) error {
+func saveConf(path string, cf cipherConfig) error {
 	fd, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0600)
 	if err != nil {
 		return err

@@ -1,5 +1,6 @@
 package main
 
+// helloCrypter implements corecrypter.CoreCrypter interface
 type helloCrypter struct {
 }
 

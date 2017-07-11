@@ -15,11 +15,12 @@ import (
 
 // Args contains cli args value
 type Args struct {
-	CipherDir  string
-	MountPoint string
-	PwdFile    string
-	DebugFuse  bool
-	Init       bool
+	cipherDir  string
+	mountPoint string
+	pwdFile    string
+	debugFuse  bool
+	init       bool
+	foreground bool
 }
 
 func usage() {
@@ -36,9 +37,10 @@ var flagSet *flag.FlagSet
 func parseArgs() (args Args) {
 	flagSet = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 
-	flagSet.StringVar(&args.PwdFile, "passfile", "", "Password file path. You will need to type password in cli if not specify this option.")
-	flagSet.BoolVar(&args.DebugFuse, "debugfuse", false, "Show fuse debug messages")
-	flagSet.BoolVar(&args.Init, "init", false, "Initialize a cipher directory")
+	flagSet.StringVar(&args.pwdFile, "passfile", "", "Password file path. You will need to type password in cli if not specify this option.")
+	flagSet.BoolVar(&args.debugFuse, "debugfuse", false, "Show fuse debug messages.")
+	flagSet.BoolVar(&args.init, "init", false, "Initialize a cipher directory.")
+	flagSet.BoolVar(&args.foreground, "f", false, "Run in foreground.")
 
 	flagSet.Usage = usage
 	flagSet.Parse(os.Args[1:])
@@ -48,21 +50,21 @@ func parseArgs() (args Args) {
 	}
 	// check directories
 	var err error
-	args.CipherDir, err = filepath.Abs(flagSet.Arg(0))
+	args.cipherDir, err = filepath.Abs(flagSet.Arg(0))
 	if err != nil {
 		tlog.Fatal.Printf("Invalid cipherdir: %v", err)
 		os.Exit(exitcode.CipherDir)
 	}
-	if err = checkDir(args.CipherDir); err != nil {
+	if err = checkDir(args.cipherDir); err != nil {
 		tlog.Fatal.Printf("Invalid cipherdir: %v", err)
 		os.Exit(exitcode.CipherDir)
 	}
 
-	if args.Init {
+	if args.init {
 		if flagSet.NArg() != 1 {
 			usage()
 		}
-		if err = checkDirEmpty(args.CipherDir); err != nil {
+		if err = checkDirEmpty(args.cipherDir); err != nil {
 			tlog.Fatal.Printf("Invalid cipherdir: %v", err)
 			os.Exit(exitcode.CipherDir)
 		}
@@ -70,12 +72,12 @@ func parseArgs() (args Args) {
 		if flagSet.NArg() != 2 {
 			usage()
 		}
-		args.MountPoint, err = filepath.Abs(flagSet.Arg(1))
+		args.mountPoint, err = filepath.Abs(flagSet.Arg(1))
 		if err != nil {
 			tlog.Fatal.Printf("Invalid mountpoint: %v", err)
 			os.Exit(exitcode.MountPoint)
 		}
-		if err = checkDir(args.MountPoint); err != nil {
+		if err = checkDir(args.mountPoint); err != nil {
 			tlog.Fatal.Printf("Invalid mountpoint: %v", err)
 			os.Exit(exitcode.MountPoint)
 		}

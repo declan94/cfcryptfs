@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Declan94/cfcryptfs/cffuse"
+	"github.com/Declan94/cfcryptfs/corecrypter"
 	"github.com/hanwen/go-fuse/fuse"
 	"github.com/hanwen/go-fuse/fuse/nodefs"
 	"github.com/hanwen/go-fuse/fuse/pathfs"
@@ -29,7 +30,8 @@ func main() {
 		CryptKey:  []byte("I am hello world key. (NOTE: Just a example, randomly generate the key in real world)"),
 		PlainBS:   512,
 	}
-	var fs = cffuse.NewFS(fsConf, &helloCrypter{})
+	var cc corecrypter.CoreCrypter = &helloCrypter{}
+	var fs = cffuse.NewFS(fsConf, cc)
 	var finalFs pathfs.FileSystem
 	finalFs = fs
 	pathFsOpts := &pathfs.PathNodeFsOptions{ClientInodes: true}

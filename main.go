@@ -22,26 +22,26 @@ import (
 func main() {
 	var args = parseArgs()
 
-	if args.Init {
-		InitCipherDir(args.CipherDir)
+	if args.init {
+		initCipherDir(args.cipherDir)
 		return
 	}
 
-	conf := LoadConf(args.CipherDir)
-	key := LoadKey(args.CipherDir, args.PwdFile)
+	conf := loadConf(args.cipherDir)
+	key := loadKey(args.cipherDir, args.pwdFile)
 	// Check mountpoint
 	// We cannot mount "/home/user/.cipher" at "/home/user" because the mount
 	// will hide ".cipher" also for us.
-	if args.CipherDir == args.MountPoint || strings.HasPrefix(args.CipherDir, args.MountPoint+"/") {
+	if args.cipherDir == args.mountPoint || strings.HasPrefix(args.cipherDir, args.mountPoint+"/") {
 		tlog.Fatal.Printf("Mountpoint %q would shadow cipherdir %q, this is not supported",
-			args.MountPoint, args.CipherDir)
+			args.mountPoint, args.cipherDir)
 		os.Exit(exitcode.MountPoint)
 	}
 	var fsConf = cffuse.FsConfig{
-		CipherDir: args.CipherDir,
-		CryptType: conf.CryptType,
+		CipherDir: args.cipherDir,
+		CryptType: conf.cryptType,
 		CryptKey:  key,
-		PlainBS:   conf.PlainBS,
+		PlainBS:   conf.plainBS,
 	}
 	var fs = cffuse.NewFS(fsConf, nil)
 	var finalFs pathfs.FileSystem
@@ -65,14 +65,14 @@ func main() {
 	// Second column, "Type", will be shown as "fuse." + Name
 	mOpts.Name = "gocryptfs"
 
-	srv, err := fuse.NewServer(conn.RawFS(), args.MountPoint, &mOpts)
+	srv, err := fuse.NewServer(conn.RawFS(), args.mountPoint, &mOpts)
 
 	if err != nil {
 		fmt.Println("Start fuse server failed")
 		os.Exit(exitcode.Fuse)
 	}
 
-	srv.SetDebug(args.DebugFuse)
+	srv.SetDebug(args.debugFuse)
 
 	// All FUSE file and directory create calls carry explicit permission
 	// information. We need an unrestricted umask to create the files and
@@ -82,7 +82,7 @@ func main() {
 	// Wait for SIGINT in the background and unmount ourselves if we get it.
 	// This prevents a dangling "Transport endpoint is not connected"
 	// mountpoint if the user hits CTRL-C.
-	handleSigint(srv, args.MountPoint)
+	handleSigint(srv, args.mountPoint)
 
 	fmt.Println("Filesystem Mounted")
 	srv.Serve()
