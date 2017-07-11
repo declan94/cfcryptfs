@@ -19,4 +19,6 @@ const (
 	SigInt
 	// Fuse means failed to start fuse server
 	Fuse
+	// ForkChild means failed to fork child process
+	ForkChild
 )

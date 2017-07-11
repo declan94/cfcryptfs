@@ -20,28 +20,28 @@ const currentVersion = 0
 
 // cipherConfig is the content of a config file.
 type cipherConfig struct {
-	version   int
-	keyFile   string
-	cryptType int
-	plainBS   int
+	Version   int
+	KeyFile   string
+	CryptType int
+	PlainBS   int
 }
 
 // initCipherDir initialize a cipher directory
 func initCipherDir(cipherDir string) {
 	var input string
 	var conf cipherConfig
-	conf.version = currentVersion
-	for conf.cryptType == 0 {
+	conf.Version = currentVersion
+	for conf.CryptType == 0 {
 		fmt.Printf("Choose an encryption type (AES128/AES192/AES256): ")
 		input = ""
 		fmt.Scanln(&input)
-		conf.cryptType = str2CryptType(input)
+		conf.CryptType = str2CryptType(input)
 	}
 	fmt.Printf("Choose a block size(1: 2KB; 2: 4KB; 3: 8KB; 4:16KB): ")
-	fmt.Scanf("%d\n", &conf.plainBS)
-	conf.plainBS = blockSize(conf.plainBS)
+	fmt.Scanf("%d\n", &conf.PlainBS)
+	conf.PlainBS = blockSize(conf.PlainBS)
 
-	generateKey(filepath.Join(cipherDir, cffuse.KeyFile), conf.cryptType)
+	generateKey(filepath.Join(cipherDir, cffuse.KeyFile), conf.CryptType)
 
 	err := saveConf(filepath.Join(cipherDir, cffuse.ConfFile), conf)
 	if err != nil {
@@ -53,8 +53,8 @@ func initCipherDir(cipherDir string) {
 // loadConf load config of the cipher directory
 func loadConf(cipherDir string) cipherConfig {
 	conf := readConf(filepath.Join(cipherDir, cffuse.ConfFile))
-	if conf.version != currentVersion {
-		tlog.Fatal.Printf("Version not matched: cipherdir(%d) != current(%d)\n", conf.version, currentVersion)
+	if conf.Version != currentVersion {
+		tlog.Fatal.Printf("Version not matched: cipherdir(%d) != current(%d)\n", conf.Version, currentVersion)
 		os.Exit(exitcode.Config)
 	}
 	return conf
@@ -79,7 +79,7 @@ func readConf(path string) (cf cipherConfig) {
 	}
 	// Unmarshal
 	err = json.Unmarshal(js, &cf)
-	if err != nil {
+	if err != nil || cf.CryptType == 0 {
 		tlog.Fatal.Printf("Failed to parse config file")
 		os.Exit(exitcode.Config)
 	}

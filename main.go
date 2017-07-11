@@ -39,9 +39,9 @@ func main() {
 	}
 	var fsConf = cffuse.FsConfig{
 		CipherDir: args.cipherDir,
-		CryptType: conf.cryptType,
+		CryptType: conf.CryptType,
 		CryptKey:  key,
-		PlainBS:   conf.plainBS,
+		PlainBS:   conf.PlainBS,
 	}
 	var fs = cffuse.NewFS(fsConf, nil)
 	var finalFs pathfs.FileSystem
@@ -86,6 +86,7 @@ func main() {
 
 	fmt.Println("Filesystem Mounted")
 	srv.Serve()
+
 }
 
 func handleSigint(srv *fuse.Server, mountpoint string) {

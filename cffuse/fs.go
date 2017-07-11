@@ -33,7 +33,7 @@ var _ pathfs.FileSystem = &CfcryptFS{} // Verify that interface is implemented.
 
 // NewFS returns a new encrypted FUSE overlay filesystem.
 func NewFS(confs FsConfig, core corecrypter.CoreCrypter) *CfcryptFS {
-	if core == nil {
+	if confs.CryptType > 0 {
 		core = corecrypter.NewCoreCrypter(confs.CryptType, confs.CryptKey)
 	}
 	if confs.BackingFileMode == 0 {
