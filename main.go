@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os/exec"
 	"os/signal"
 	"runtime"
@@ -23,18 +22,8 @@ import (
 func main() {
 	var args = parseArgs()
 
-	if args.GenConf {
+	if args.GenConf || args.GenKey {
 		return
-	}
-	if args.KeyFile == "" {
-		tlog.Fatal.Printf("You should provide a keyfile in cli args or conf file!")
-		os.Exit(exitcode.KeyFile)
-	}
-	// Read key
-	key, err := ioutil.ReadFile(args.KeyFile)
-	if err != nil {
-		tlog.Fatal.Printf("Read from key file error: %v", err)
-		os.Exit(exitcode.KeyFile)
 	}
 
 	// Check mountpoint
@@ -48,7 +37,7 @@ func main() {
 	var fsConf = cffuse.FsConfig{
 		CipherDir: args.CipherDir,
 		CryptType: args.CryptType.int,
-		CryptKey:  key,
+		CryptKey:  args.Key,
 		PlainBS:   args.PlainBS,
 	}
 	var fs = cffuse.NewFS(fsConf)

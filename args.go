@@ -13,6 +13,8 @@ import (
 
 	"github.com/Declan94/cfcryptfs/internal/corecrypter"
 	"github.com/Declan94/cfcryptfs/internal/exitcode"
+	"github.com/Declan94/cfcryptfs/internal/keycrypter"
+	"github.com/Declan94/cfcryptfs/internal/readpwd"
 	"github.com/Declan94/cfcryptfs/internal/tlog"
 )
 
@@ -34,15 +36,20 @@ type Args struct {
 	MountPoint string
 	ConfFile   string
 	KeyFile    string
+	PwdFile    string
+	Key        []byte
 	CryptType  ArgCryptType
 	DebugFuse  bool
 	GenConf    bool
+	GenKey     bool
 	PlainBS    int
 }
 
 func usage() {
-	fmt.Printf("usage: %s MOUNTPOINT ORIGINAL\n", path.Base(os.Args[0]))
+	fmt.Printf("Usage: %s [options] MOUNTPOINT ORIGINAL\n", path.Base(os.Args[0]))
+	fmt.Printf("   or: %s -gen_conf|-gen_key\n", path.Base(os.Args[0]))
 	fmt.Printf("\noptions:\n")
+	flagSet.PrintDefaults()
 }
 
 func loadArgsFromConf(path string) (args Args) {
@@ -85,6 +92,92 @@ func saveArgsToConf(path string, args *Args) error {
 	return err
 }
 
+func loadKey(args *Args) {
+	if args.KeyFile == "" {
+		tlog.Fatal.Printf("You should provide a keyfile in cli args or conf file!")
+		os.Exit(exitcode.KeyFile)
+	}
+	encKey, err := ioutil.ReadFile(args.KeyFile)
+	if err != nil {
+		tlog.Fatal.Printf("Read from key file failed: %v", err)
+		os.Exit(exitcode.KeyFile)
+	}
+	password, err := readpwd.Once(args.PwdFile)
+	if err != nil {
+		tlog.Fatal.Printf("Read password failed: %v", err)
+		os.Exit(exitcode.KeyFile)
+	}
+	args.Key, err = keycrypter.DecrytKey(encKey, password)
+	if err != nil {
+		tlog.Fatal.Printf("Decrypt master key failed: %v", err)
+		os.Exit(exitcode.KeyFile)
+	}
+}
+
+func generateKey(args *Args) {
+	var input string
+	for args.CryptType.int == 0 {
+		fmt.Printf("Choose an encryption type (AES128/AES192/AES256): ")
+		input = ""
+		fmt.Scanln(&input)
+		args.CryptType.Set(input)
+	}
+	// Genreate a random key
+	key, err := corecrypter.RandomKey(args.CryptType.int)
+	if err != nil {
+		tlog.Fatal.Printf("Generate random key failed: %s", err)
+		os.Exit(exitcode.KeyFile)
+	}
+	var encKey []byte
+	for true {
+		fmt.Println("Enter a password for the key file.")
+		pwd, err := readpwd.Twice("")
+		if err != nil {
+			fmt.Println(err)
+		} else {
+			encKey, err = keycrypter.EncryptKey(key, pwd)
+			if err != nil {
+				tlog.Fatal.Printf("Encrypt key failed: %v\n", err)
+				os.Exit(exitcode.KeyFile)
+			}
+			break
+		}
+	}
+	for true {
+		fmt.Printf("Where to save the key file (~/.cfcryptfs_key)?")
+		input = ""
+		fmt.Scanln(&input)
+		path := strings.Trim(input, " \t\n")
+		if path == "" {
+			path = "~/.cfcryptfs_key"
+		}
+		path = expandPath(path)
+		toWrite := true
+		if _, err := os.Stat(path); err == os.ErrExist {
+			fmt.Printf("File already exists, overwrite it? (y/N): ")
+			input = ""
+			fmt.Scanln(&input)
+			input = strings.Trim(input, " \t\n")
+			toWrite = input != "" && strings.ToUpper(input[:1]) == "Y"
+		}
+
+		if toWrite {
+			fd, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0600)
+			if err != nil {
+				fmt.Printf("Open key file failed: %s\n", err)
+				continue
+			}
+			_, err = fd.Write(encKey)
+			if err != nil {
+				fmt.Printf("Write key file failed: %s\n", err)
+			} else {
+				args.KeyFile = path
+				break
+			}
+		}
+	}
+}
+
 func generateConf(args Args) {
 	var input string
 	for args.CryptType.int == 0 {
@@ -102,45 +195,7 @@ func generateConf(args Args) {
 		fmt.Printf("Input the existed key file path: ")
 		fmt.Scanln(&args.KeyFile)
 	} else {
-		// Genreate a random key
-		key, err := corecrypter.RandomKey(args.CryptType.int)
-		if err != nil {
-			tlog.Fatal.Printf("Generate random key failed: %s", err)
-			os.Exit(exitcode.KeyFile)
-		}
-		for true {
-			fmt.Printf("Where to save the key file (~/.cfcryptfs_key)?")
-			input = ""
-			fmt.Scanln(&input)
-			path := strings.Trim(input, " \t\n")
-			if path == "" {
-				path = "~/.cfcryptfs_key"
-			}
-			path = expandPath(path)
-			toWrite := true
-			if _, err := os.Stat(path); err == os.ErrExist {
-				fmt.Printf("File already exists, overwrite it? (y/N): ")
-				input = ""
-				fmt.Scanln(&input)
-				input = strings.Trim(input, " \t\n")
-				toWrite = input != "" && strings.ToUpper(input[:1]) == "Y"
-			}
-
-			if toWrite {
-				fd, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0600)
-				if err != nil {
-					fmt.Printf("Open key file failed: %s\n", err)
-					continue
-				}
-				_, err = fd.Write(key)
-				if err != nil {
-					fmt.Printf("Write key file failed: %s\n", err)
-				} else {
-					args.KeyFile = path
-					break
-				}
-			}
-		}
+		generateKey(&args)
 	}
 	for args.PlainBS < 1 || args.PlainBS > 4 {
 		fmt.Printf("Choose a block size(1: 2KB; 2: 4KB; 3: 8KB; 4:16KB): ")
@@ -176,21 +231,29 @@ func generateConf(args Args) {
 
 }
 
+var flagSet *flag.FlagSet
+
 // parseArgs parse args from cli args
 func parseArgs() (args Args) {
-	var flagSet = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+	flagSet = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 
 	flagSet.StringVar(&args.ConfFile, "conf", "", "Configuration file path (configs in conf file will be override by cli options)")
-	flagSet.StringVar(&args.KeyFile, "key", "", "Key file path")
+	flagSet.StringVar(&args.KeyFile, "keyfile", "", "Key file path")
+	flagSet.StringVar(&args.PwdFile, "passfile", "", "Password file path. You will need to type password in cli if not specify this option.")
 	flagSet.BoolVar(&args.DebugFuse, "debugfuse", false, "Show fuse debug messages")
 	flagSet.BoolVar(&args.GenConf, "gen_conf", false, "To generate a configuration file")
-	flagSet.Var(&args.CryptType, "type", "Encryption type (AES128/AES192/AES256)")
-	flagSet.IntVar(&args.PlainBS, "bs", 0, "Block size for plaintext (1: 2KB; 2: 4KB(default); 3: 8KB; 4:16KB")
+	flagSet.BoolVar(&args.GenKey, "gen_key", false, "To generate a key file")
+	flagSet.Var(&args.CryptType, "type", "Encryption type (AES128/AES192/AES256) default: AES256")
+	flagSet.IntVar(&args.PlainBS, "bs", 1, "Block size for plaintext (1: 2KB; 2: 4KB; 3: 8KB; 4:16KB) default: 4KB")
 
+	flagSet.Usage = usage
 	flagSet.Parse(os.Args[1:])
 
 	if args.GenConf {
 		generateConf(args)
+		return args
+	} else if args.GenKey {
+		generateKey(&args)
 		return args
 	}
 
@@ -216,7 +279,6 @@ func parseArgs() (args Args) {
 
 	if flagSet.NArg() != 2 {
 		usage()
-		fmt.Printf("Wrong args count: %d\n", flagSet.NArg())
 		os.Exit(exitcode.Usage)
 	}
 
@@ -240,6 +302,9 @@ func parseArgs() (args Args) {
 		tlog.Fatal.Printf("Invalid mountpoint: %v", err)
 		os.Exit(exitcode.MountPoint)
 	}
+
+	// Read key
+	loadKey(&args)
 
 	return args
 }
