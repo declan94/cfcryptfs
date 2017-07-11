@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"reflect"
 	"syscall"
 	"time"
 
@@ -33,7 +34,7 @@ var _ pathfs.FileSystem = &CfcryptFS{} // Verify that interface is implemented.
 
 // NewFS returns a new encrypted FUSE overlay filesystem.
 func NewFS(confs FsConfig, core corecrypter.CoreCrypter) *CfcryptFS {
-	if confs.CryptType > 0 {
+	if core == nil || reflect.ValueOf(core).IsNil() {
 		core = corecrypter.NewCoreCrypter(confs.CryptType, confs.CryptKey)
 	}
 	if confs.BackingFileMode == 0 {
@@ -174,6 +175,9 @@ func (fs *CfcryptFS) OpenDir(path string, context *fuse.Context) (stream []fuse.
 		for i := range infos {
 			// workaround forhttps://code.google.com/p/go/issues/detail?id=5960
 			if infos[i] == nil {
+				continue
+			}
+			if IsNameReserved(infos[i].Name()) {
 				continue
 			}
 			n, err := fs.nameCrypt.DecryptName(infos[i].Name())
