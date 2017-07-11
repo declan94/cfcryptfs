@@ -11,7 +11,7 @@ import (
 
 	"os"
 
-	"github.com/Declan94/cfcryptfs/internal/cffuse"
+	"github.com/Declan94/cfcryptfs/cffuse"
 	"github.com/Declan94/cfcryptfs/internal/exitcode"
 	"github.com/Declan94/cfcryptfs/internal/tlog"
 	"github.com/hanwen/go-fuse/fuse"
@@ -40,7 +40,7 @@ func main() {
 		CryptKey:  args.Key,
 		PlainBS:   args.PlainBS,
 	}
-	var fs = cffuse.NewFS(fsConf)
+	var fs = cffuse.NewFS(fsConf, nil)
 	var finalFs pathfs.FileSystem
 	finalFs = fs
 	pathFsOpts := &pathfs.PathNodeFsOptions{ClientInodes: true}

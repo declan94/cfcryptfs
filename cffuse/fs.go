@@ -11,8 +11,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Declan94/cfcryptfs/corecrypter"
 	"github.com/Declan94/cfcryptfs/internal/contcrypter"
-	"github.com/Declan94/cfcryptfs/internal/corecrypter"
 	"github.com/Declan94/cfcryptfs/internal/namecrypter"
 	"github.com/Declan94/cfcryptfs/internal/tlog"
 	"github.com/hanwen/go-fuse/fuse"
@@ -32,12 +32,17 @@ type CfcryptFS struct {
 var _ pathfs.FileSystem = &CfcryptFS{} // Verify that interface is implemented.
 
 // NewFS returns a new encrypted FUSE overlay filesystem.
-func NewFS(confs FsConfig) *CfcryptFS {
-	core := corecrypter.NewCoreCrypter(confs.CryptType, confs.CryptKey)
+func NewFS(confs FsConfig, core corecrypter.CoreCrypter) *CfcryptFS {
+	if core == nil {
+		core = corecrypter.NewCoreCrypter(confs.CryptType, confs.CryptKey)
+	}
+	if confs.BackingFileMode == 0 {
+		confs.BackingFileMode = 0600
+	}
 	return &CfcryptFS{
 		FileSystem:      pathfs.NewLoopbackFileSystem(confs.CipherDir),
 		configs:         confs,
-		backingFileMode: 0600,
+		backingFileMode: confs.BackingFileMode,
 		contentCrypt:    contcrypter.NewContentCrypter(core, confs.PlainBS),
 		nameCrypt:       namecrypter.NewNameCrypter(confs.CryptKey),
 	}

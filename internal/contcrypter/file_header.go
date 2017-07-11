@@ -11,7 +11,7 @@ import (
 	"log"
 	"syscall"
 
-	"github.com/Declan94/cfcryptfs/internal/corecrypter"
+	"github.com/Declan94/cfcryptfs/corecrypter"
 	"github.com/Declan94/cfcryptfs/internal/tlog"
 )
 

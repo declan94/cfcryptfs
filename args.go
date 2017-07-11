@@ -11,11 +11,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Declan94/cfcryptfs/internal/corecrypter"
+	"github.com/Declan94/cfcryptfs/corecrypter"
 	"github.com/Declan94/cfcryptfs/internal/exitcode"
-	"github.com/Declan94/cfcryptfs/internal/keycrypter"
-	"github.com/Declan94/cfcryptfs/internal/readpwd"
 	"github.com/Declan94/cfcryptfs/internal/tlog"
+	"github.com/Declan94/cfcryptfs/keycrypter"
+	"github.com/Declan94/cfcryptfs/readpwd"
 )
 
 // ArgCryptType for crypttype in args
@@ -97,23 +97,10 @@ func loadKey(args *Args) {
 		tlog.Fatal.Printf("You should provide a keyfile in cli args or conf file!")
 		os.Exit(exitcode.KeyFile)
 	}
-	encKey, err := ioutil.ReadFile(args.KeyFile)
+	var err error
+	args.Key, err = keycrypter.LoadKey(args.KeyFile, args.PwdFile)
 	if err != nil {
-		tlog.Fatal.Printf("Read from key file failed: %v", err)
-		os.Exit(exitcode.KeyFile)
-	}
-	extpwd := args.PwdFile
-	if extpwd != "" {
-		extpwd = "/bin/cat -- " + extpwd
-	}
-	password, err := readpwd.Once(extpwd)
-	if err != nil {
-		tlog.Fatal.Printf("Read password failed: %v", err)
-		os.Exit(exitcode.KeyFile)
-	}
-	args.Key, err = keycrypter.DecrytKey(encKey, password)
-	if err != nil {
-		tlog.Fatal.Printf("Decrypt master key failed: %v", err)
+		tlog.Fatal.Println(err)
 		os.Exit(exitcode.KeyFile)
 	}
 }
@@ -132,18 +119,13 @@ func generateKey(args *Args) {
 		tlog.Fatal.Printf("Generate random key failed: %s", err)
 		os.Exit(exitcode.KeyFile)
 	}
-	var encKey []byte
+	var pwd string
 	for true {
 		fmt.Println("Enter a password for the key file.")
-		pwd, err := readpwd.Twice("")
+		pwd, err = readpwd.Twice("")
 		if err != nil {
 			fmt.Println(err)
 		} else {
-			encKey, err = keycrypter.EncryptKey(key, pwd)
-			if err != nil {
-				tlog.Fatal.Printf("Encrypt key failed: %v\n", err)
-				os.Exit(exitcode.KeyFile)
-			}
 			break
 		}
 	}
@@ -164,16 +146,10 @@ func generateKey(args *Args) {
 			input = strings.Trim(input, " \t\n")
 			toWrite = input != "" && strings.ToUpper(input[:1]) == "Y"
 		}
-
 		if toWrite {
-			fd, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0600)
+			err = keycrypter.StoreKey(path, pwd, key)
 			if err != nil {
-				fmt.Printf("Open key file failed: %s\n", err)
-				continue
-			}
-			_, err = fd.Write(encKey)
-			if err != nil {
-				fmt.Printf("Write key file failed: %s\n", err)
+				fmt.Println(err)
 			} else {
 				args.KeyFile = path
 				break
