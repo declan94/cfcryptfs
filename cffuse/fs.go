@@ -96,7 +96,8 @@ func (fs *CfcryptFS) Open(path string, flags uint32, context *fuse.Context) (fus
 
 // Chmod implements pathfs.Filesystem.
 func (fs *CfcryptFS) Chmod(path string, mode uint32, context *fuse.Context) (code fuse.Status) {
-	a, status := fs.FileSystem.GetAttr(path, context)
+	cpath := fs.nameCrypt.EncryptPath(path)
+	a, status := fs.FileSystem.GetAttr(cpath, context)
 	if a == nil {
 		tlog.Debug.Printf("CfcryptFS.GetAttr failed: %s", status.String())
 		return status
@@ -188,10 +189,22 @@ func (fs *CfcryptFS) OpenDir(path string, context *fuse.Context) (stream []fuse.
 			d := fuse.DirEntry{
 				Name: n,
 			}
-			if s := fuse.ToStatT(infos[i]); s != nil {
-				d.Mode = uint32(s.Mode)
+			if infos[i].Mode().IsRegular() {
+				f, status := fs.Open(filepath.Join(path, n), uint32(os.O_RDWR), context)
+				if status != fuse.OK {
+					tlog.Warn.Printf("Open file to get mode failed: %s", infos[i].Name())
+					continue
+				}
+				var attr fuse.Attr
+				f.GetAttr(&attr)
+				f.Release()
+				d.Mode = attr.Mode
 			} else {
-				log.Printf("ReadDir entry %q for %q has no stat info", n, path)
+				if s := fuse.ToStatT(infos[i]); s != nil {
+					d.Mode = uint32(s.Mode)
+				} else {
+					log.Printf("ReadDir entry %q for %q has no stat info", n, path)
+				}
 			}
 			output = append(output, d)
 		}
@@ -270,8 +283,9 @@ func (fs *CfcryptFS) Link(orig string, newName string, context *fuse.Context) (c
 
 // Access fuse implemention
 func (fs *CfcryptFS) Access(name string, mode uint32, context *fuse.Context) (code fuse.Status) {
-	tlog.Debug.Printf("CfcryptFS.Access('%s')", name)
-	return fuse.ToStatus(syscall.Access(fs.getUnderlyingPath(name), mode))
+	// tlog.Debug.Printf("CfcryptFS.Access('%s')", name)
+	// return fuse.ToStatus(syscall.Access(fs.getUnderlyingPath(name), mode))
+	return fuse.ENOSYS
 }
 
 // ListXAttr fuse implemention
