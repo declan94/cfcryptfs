@@ -21,6 +21,7 @@ type Args struct {
 	debugFuse  bool
 	init       bool
 	foreground bool
+	allowOther bool
 }
 
 func usage() {
@@ -41,6 +42,7 @@ func parseArgs() (args Args) {
 	flagSet.BoolVar(&args.debugFuse, "debugfuse", false, "Show fuse debug messages.")
 	flagSet.BoolVar(&args.init, "init", false, "Initialize a cipher directory.")
 	flagSet.BoolVar(&args.foreground, "f", false, "Run in foreground.")
+	flagSet.BoolVar(&args.allowOther, "allow_other", false, "Allow other users to access the filesystem. Only works if user_allow_other is set in /etc/fuse.conf.")
 
 	flagSet.Usage = usage
 	flagSet.Parse(os.Args[1:])
@@ -80,6 +82,10 @@ func parseArgs() (args Args) {
 		if err = checkDir(args.mountPoint); err != nil {
 			tlog.Fatal.Printf("Invalid mountpoint: %v", err)
 			os.Exit(exitcode.MountPoint)
+		}
+		if args.allowOther && os.Getuid() != 0 {
+			tlog.Fatal.Printf("Allow_other option can only work when run as root user.")
+			os.Exit(exitcode.Usage)
 		}
 	}
 

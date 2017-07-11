@@ -40,6 +40,12 @@ func NewFS(confs FsConfig, core corecrypter.CoreCrypter) *CfcryptFS {
 	if confs.BackingFileMode == 0 {
 		confs.BackingFileMode = 0600
 	}
+	if confs.AllowOther {
+		if os.Getuid() != 0 {
+			tlog.Fatal.Printf("Only run as root can set allow other property.")
+			return nil
+		}
+	}
 	return &CfcryptFS{
 		FileSystem:      pathfs.NewLoopbackFileSystem(confs.CipherDir),
 		configs:         confs,
@@ -62,9 +68,11 @@ func (fs *CfcryptFS) Create(path string, flags uint32, mode uint32, context *fus
 		return nil, fuse.ToStatus(err)
 	}
 	// Set owner
-	err = fd.Chown(int(context.Owner.Uid), int(context.Owner.Gid))
-	if err != nil {
-		tlog.Warn.Printf("Create: fd.Chown failed: %v", err)
+	if fs.configs.AllowOther {
+		err = fd.Chown(int(context.Owner.Uid), int(context.Owner.Gid))
+		if err != nil {
+			tlog.Warn.Printf("Create: fd.Chown failed: %v", err)
+		}
 	}
 	// Initialize File
 	file, status := newFile(fd, fs)
@@ -251,12 +259,28 @@ func (fs *CfcryptFS) Readlink(name string, context *fuse.Context) (out string, c
 
 // Mknod fuse implemention
 func (fs *CfcryptFS) Mknod(name string, mode uint32, dev uint32, context *fuse.Context) (code fuse.Status) {
-	return fuse.ToStatus(syscall.Mknod(fs.getUnderlyingPath(name), mode, int(dev)))
+	upath := fs.getUnderlyingPath(name)
+	err := syscall.Mknod(fs.getUnderlyingPath(name), mode, int(dev))
+	if err != nil {
+		return fuse.ToStatus(err)
+	}
+	if fs.configs.AllowOther {
+		err = os.Chown(upath, int(context.Uid), int(context.Gid))
+	}
+	return fuse.ToStatus(err)
 }
 
 // Mkdir fuse implemention
 func (fs *CfcryptFS) Mkdir(path string, mode uint32, context *fuse.Context) (code fuse.Status) {
-	return fuse.ToStatus(os.Mkdir(fs.getUnderlyingPath(path), os.FileMode(mode)))
+	upath := fs.getUnderlyingPath(path)
+	err := os.Mkdir(upath, os.FileMode(mode))
+	if err != nil {
+		return fuse.ToStatus(err)
+	}
+	if fs.configs.AllowOther {
+		err = os.Chown(upath, int(context.Uid), int(context.Gid))
+	}
+	return fuse.ToStatus(err)
 }
 
 // Unlink fuse implemention

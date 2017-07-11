@@ -2,14 +2,13 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"os/signal"
 	"runtime"
 	"strings"
 	"syscall"
 	"time"
-
-	"os"
 
 	"github.com/Declan94/cfcryptfs/cffuse"
 	"github.com/Declan94/cfcryptfs/internal/exitcode"
@@ -38,10 +37,11 @@ func main() {
 		os.Exit(exitcode.MountPoint)
 	}
 	var fsConf = cffuse.FsConfig{
-		CipherDir: args.cipherDir,
-		CryptType: conf.CryptType,
-		CryptKey:  key,
-		PlainBS:   conf.PlainBS,
+		CipherDir:  args.cipherDir,
+		CryptType:  conf.CryptType,
+		CryptKey:   key,
+		PlainBS:    conf.PlainBS,
+		AllowOther: args.allowOther,
 	}
 	var fs = cffuse.NewFS(fsConf, nil)
 	var finalFs pathfs.FileSystem
@@ -60,11 +60,13 @@ func main() {
 		// Bigger writes mean fewer calls and better throughput.
 		// Capped to 128KiB on Linux.
 		MaxWrite: fuse.MAX_KERNEL_WRITE,
+		Name:     "cfcryptfs",
 	}
-
-	// Second column, "Type", will be shown as "fuse." + Name
-	mOpts.Name = "gocryptfs"
-
+	if args.allowOther {
+		mOpts.AllowOther = true
+		// Make the kernel check the file permissions for us
+		mOpts.Options = append(mOpts.Options, "default_permissions")
+	}
 	srv, err := fuse.NewServer(conn.RawFS(), args.mountPoint, &mOpts)
 
 	if err != nil {

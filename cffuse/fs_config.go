@@ -14,4 +14,6 @@ type FsConfig struct {
 	PlainBS int
 	// BakingFileMode - mode of the underling file in the cipher directory. (default: 0600)
 	BackingFileMode uint32
+	// AllowOther - allow other user to access the filesystem, must run as root user
+	AllowOther bool
 }
