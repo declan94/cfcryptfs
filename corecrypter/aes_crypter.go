@@ -3,7 +3,6 @@ package corecrypter
 import (
 	"crypto/aes"
 	"crypto/cipher"
-
 	"errors"
 
 	"github.com/Declan94/cfcryptfs/internal/tlog"
@@ -70,8 +69,9 @@ func (ac *AesCrypter) EncryptWithIV(dest, src []byte, iv []byte) {
 // It's important to remember that ciphertexts must be authenticated
 // (i.e. by using crypto/hmac) as well as being encrypted in order to be secure.
 // authentication will be down outside cryptor, to include file ID and block No.
-func (ac *AesCrypter) Encrypt(dest, src []byte) {
+func (ac *AesCrypter) Encrypt(dest, src []byte) error {
 	ac.EncryptWithIV(dest, src, RandBytes(ac.blockSize))
+	return nil
 }
 
 // Decrypt decrypt cipher

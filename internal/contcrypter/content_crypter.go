@@ -63,20 +63,22 @@ func (cc *ContentCrypter) makeSign(data []byte, blockNo uint64, fileID []byte) [
 	return sign
 }
 
-func (cc *ContentCrypter) encryptBlock(plain []byte, blockNo uint64, fileID []byte) []byte {
+func (cc *ContentCrypter) encryptBlock(plain []byte, blockNo uint64, fileID []byte) ([]byte, error) {
 	// Empty block?
 	if len(plain) == 0 {
-		return plain
+		return plain, nil
 	}
 	// Get a cipherBS-sized block of memory, encrypt plaintext and then authenticate with hmac-md5 signature
 	cipherDataBlock := cc.cBlockPool.Get()
-	cc.core.Encrypt(cipherDataBlock, plain)
+	if err := cc.core.Encrypt(cipherDataBlock, plain); err != nil {
+		return nil, err
+	}
 	cipherDataLen := cc.core.LenAfterEncrypted(len(plain))
 	// Block is authenticated with block numccr and file ID
 	signedBlock := cipherDataBlock[:cipherDataLen+signLen]
 	cipherDataBlock = cipherDataBlock[:cipherDataLen]
 	copy(signedBlock[cipherDataLen:], cc.makeSign(cipherDataBlock, blockNo, fileID))
-	return signedBlock
+	return signedBlock, nil
 }
 
 func (cc *ContentCrypter) decryptBlock(cipher []byte, blockNo uint64, fileID []byte) ([]byte, error) {
@@ -107,15 +109,19 @@ func (cc *ContentCrypter) decryptBlock(cipher []byte, blockNo uint64, fileID []b
 }
 
 // EncryptBlocks encrypt multiple continuous plain blocks
-func (cc *ContentCrypter) EncryptBlocks(blocks [][]byte, firstBlockNo uint64, fileID []byte) []byte {
+func (cc *ContentCrypter) EncryptBlocks(blocks [][]byte, firstBlockNo uint64, fileID []byte) ([]byte, error) {
 	tmp := cc.CReqPool.Get()
 	out := bytes.NewBuffer(tmp[:0])
 	for i, v := range blocks {
-		cBlock := cc.encryptBlock(v, firstBlockNo+uint64(i), fileID)
+		cBlock, err := cc.encryptBlock(v, firstBlockNo+uint64(i), fileID)
+		if err != nil {
+			tlog.Warn.Printf("Encryption Block Error: %v\n", err)
+			return nil, err
+		}
 		out.Write(cBlock)
 		cc.cBlockPool.Put(cBlock)
 	}
-	return out.Bytes()
+	return out.Bytes(), nil
 }
 
 // DecryptBlocks decrypt multiple continous cipher blocks
@@ -127,7 +133,8 @@ func (cc *ContentCrypter) DecryptBlocks(cipher []byte, firstBlockNo uint64, file
 		cBlock := cBuf.Next(int(cc.cipherBS))
 		var pBlock []byte
 		if pBlock, err = cc.decryptBlock(cBlock, firstBlockNo, fileID); err != nil {
-			break
+			tlog.Warn.Printf("Decryption Block Error: %v\n", err)
+			return nil, err
 		}
 		pBuf.Write(pBlock)
 		cc.pBlockPool.Put(pBlock)

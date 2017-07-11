@@ -12,7 +12,7 @@ type CoreCrypter interface {
 	LenAfterEncrypted(plainLen int) int
 	LenAfterDecrypted(cipherLen int) int
 	// Encrypt encrypt src to dest
-	Encrypt(dest, src []byte)
+	Encrypt(dest, src []byte) error
 	// Decrypt decrypt src to dest
 	Decrypt(dest, src []byte) error
 }
