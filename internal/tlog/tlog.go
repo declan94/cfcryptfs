@@ -101,7 +101,7 @@ func init() {
 	}
 
 	Debug = &toggledLogger{
-		Enabled: true,
+		Enabled: false,
 		Logger:  log.New(os.Stdout, "", 0),
 	}
 	Info = &toggledLogger{
