@@ -51,7 +51,9 @@ You can sync your CIPHER dir with any Network Access Storage without worrying le
 ## Features
 
 #### Extensible
-Support multiple core encryption methods(AES128/AES192/AES256).  You can also create your own encryption methods by implementing ```corecrypter.CoreCrypter``` interface. The 'example' subfolder gives some simple examples.
+Support multiple core encryption methods(AES128/AES192/AES256).  You can also create your own encryption methods by implementing ```corecrypter.CoreCrypter``` interface. The 'example' subfolder gives some simple examples. 
+
+In some cases with extremely high security level, you may consider extend cfcryptfs using core encryption provided by some hardware devices.
 
 #### Flexible
 Besides encryption methods, You can also choose different encryption block size, whether encrypt filepath, etc. This is important because different application and work environment often have different demands for the filesystem.
