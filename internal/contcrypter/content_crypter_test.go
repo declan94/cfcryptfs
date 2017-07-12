@@ -6,7 +6,7 @@ import (
 	"io"
 	"testing"
 
-	"github.com/Declan94/cfcryptfs/corecrypter"
+	"github.com/declan94/cfcryptfs/corecrypter"
 )
 
 var key = make([]byte, corecrypter.AES256KeySize)

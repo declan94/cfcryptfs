@@ -33,7 +33,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/Declan94/cfcryptfs/internal/tlog"
+	"github.com/declan94/cfcryptfs/internal/tlog"
 
 	"golang.org/x/crypto/ssh/terminal"
 )

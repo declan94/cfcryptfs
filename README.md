@@ -23,7 +23,7 @@ For now, you can only install cfcryptfs by source code. You have to install go t
 
 After that, execute commands below:
 ```
-$ go get -u github.com/Declan94/cfcryptfs
+$ go get -u github.com/declan94/cfcryptfs
 $ sudo cp `go env GOPATH`/bin/cfcryptfs /usr/local/bin
 ```
 

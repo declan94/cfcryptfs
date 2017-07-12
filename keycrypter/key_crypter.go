@@ -8,7 +8,7 @@ import (
 	"errors"
 	"io"
 
-	"github.com/Declan94/cfcryptfs/corecrypter"
+	"github.com/declan94/cfcryptfs/corecrypter"
 	"golang.org/x/crypto/scrypt"
 )
 

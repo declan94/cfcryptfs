@@ -11,8 +11,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Declan94/cfcryptfs/cffuse"
-	"github.com/Declan94/cfcryptfs/corecrypter"
+	"github.com/declan94/cfcryptfs/cffuse"
+	"github.com/declan94/cfcryptfs/corecrypter"
 	"github.com/hanwen/go-fuse/fuse"
 	"github.com/hanwen/go-fuse/fuse/nodefs"
 	"github.com/hanwen/go-fuse/fuse/pathfs"

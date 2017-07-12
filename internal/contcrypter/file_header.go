@@ -11,8 +11,8 @@ import (
 	"log"
 	"syscall"
 
-	"github.com/Declan94/cfcryptfs/corecrypter"
-	"github.com/Declan94/cfcryptfs/internal/tlog"
+	"github.com/declan94/cfcryptfs/corecrypter"
+	"github.com/declan94/cfcryptfs/internal/tlog"
 )
 
 const (

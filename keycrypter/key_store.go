@@ -5,7 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 
-	"github.com/Declan94/cfcryptfs/readpwd"
+	"github.com/declan94/cfcryptfs/readpwd"
 )
 
 // LoadKey loads key from the encrypted key file

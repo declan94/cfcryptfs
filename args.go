@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Declan94/cfcryptfs/internal/exitcode"
-	"github.com/Declan94/cfcryptfs/internal/tlog"
+	"github.com/declan94/cfcryptfs/internal/exitcode"
+	"github.com/declan94/cfcryptfs/internal/tlog"
 )
 
 var flagSet *flag.FlagSet

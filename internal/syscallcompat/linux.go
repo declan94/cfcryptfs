@@ -5,7 +5,7 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/Declan94/cfcryptfs/internal/tlog"
+	"github.com/declan94/cfcryptfs/internal/tlog"
 )
 
 const FallocFlKeepSize = 0x01

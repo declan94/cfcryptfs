@@ -9,8 +9,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Declan94/cfcryptfs/internal/contcrypter"
-	"github.com/Declan94/cfcryptfs/internal/tlog"
+	"github.com/declan94/cfcryptfs/internal/contcrypter"
+	"github.com/declan94/cfcryptfs/internal/tlog"
 	"github.com/hanwen/go-fuse/fuse"
 	"github.com/hanwen/go-fuse/fuse/nodefs"
 )

@@ -32,8 +32,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/Declan94/cfcryptfs/internal/exitcode"
-	"github.com/Declan94/cfcryptfs/internal/tlog"
+	"github.com/declan94/cfcryptfs/internal/exitcode"
+	"github.com/declan94/cfcryptfs/internal/tlog"
 )
 
 // The child sends us USR1 if the mount was successful. Exit with error code

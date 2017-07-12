@@ -11,9 +11,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Declan94/cfcryptfs/cffuse"
-	"github.com/Declan94/cfcryptfs/internal/exitcode"
-	"github.com/Declan94/cfcryptfs/internal/tlog"
+	"github.com/declan94/cfcryptfs/cffuse"
+	"github.com/declan94/cfcryptfs/internal/exitcode"
+	"github.com/declan94/cfcryptfs/internal/tlog"
 	"github.com/hanwen/go-fuse/fuse"
 	"github.com/hanwen/go-fuse/fuse/nodefs"
 	"github.com/hanwen/go-fuse/fuse/pathfs"

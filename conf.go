@@ -8,12 +8,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Declan94/cfcryptfs/cffuse"
-	"github.com/Declan94/cfcryptfs/corecrypter"
-	"github.com/Declan94/cfcryptfs/internal/exitcode"
-	"github.com/Declan94/cfcryptfs/internal/tlog"
-	"github.com/Declan94/cfcryptfs/keycrypter"
-	"github.com/Declan94/cfcryptfs/readpwd"
+	"github.com/declan94/cfcryptfs/cffuse"
+	"github.com/declan94/cfcryptfs/corecrypter"
+	"github.com/declan94/cfcryptfs/internal/exitcode"
+	"github.com/declan94/cfcryptfs/internal/tlog"
+	"github.com/declan94/cfcryptfs/keycrypter"
+	"github.com/declan94/cfcryptfs/readpwd"
 )
 
 const currentVersion = 0

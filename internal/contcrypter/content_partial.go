@@ -3,7 +3,7 @@ package contcrypter
 import (
 	"log"
 
-	"github.com/Declan94/cfcryptfs/internal/tlog"
+	"github.com/declan94/cfcryptfs/internal/tlog"
 )
 
 // IntraBlock identifies a part of a file block

@@ -4,7 +4,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/Declan94/cfcryptfs/internal/contcrypter"
+	"github.com/declan94/cfcryptfs/internal/contcrypter"
 )
 
 // fentry is an entry in the entry table
