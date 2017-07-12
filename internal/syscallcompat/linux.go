@@ -28,8 +28,6 @@ import (
 	"sync"
 	"syscall"
 
-	"golang.org/x/sys/unix"
-
 	"github.com/declan94/cfcryptfs/internal/tlog"
 )
 
@@ -42,7 +40,7 @@ var preallocWarn sync.Once
 // ciphertext block (that would corrupt the block).
 func EnospcPrealloc(fd int, off int64, len int64) (err error) {
 	for {
-		unix.Fallocate(fd, FallocFlKeepSize, off, len)
+		syscall.Fallocate(fd, FallocFlKeepSize, off, len)
 		if err == syscall.EINTR {
 			// fallocate, like many syscalls, can return EINTR. This is not an
 			// error and just signifies that the operation was interrupted by a

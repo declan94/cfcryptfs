@@ -1,4 +1,4 @@
-// build +darwin
+// +build darwin
 
 // The MIT License (MIT)
 
