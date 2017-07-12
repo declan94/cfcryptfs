@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/declan94/cfcryptfs/internal/contcrypter"
+	"github.com/declan94/cfcryptfs/internal/syscallcompat"
 	"github.com/declan94/cfcryptfs/internal/tlog"
 	"github.com/hanwen/go-fuse/fuse"
 	"github.com/hanwen/go-fuse/fuse/nodefs"
@@ -331,11 +332,11 @@ func (f *file) write(data []byte, off int64) (uint32, fuse.Status) {
 	// Preallocate so we cannot run out of space in the middle of the write.
 	// This prevents partially written (=corrupt) blocks.
 	cOff := int64(f.contentEnc.BlockNoToCipherOff(blocks[0].BlockNo))
-	// err = syscallcompat.EnospcPrealloc(int(f.fd.Fd()), cOff, int64(len(ciphertext)))
-	// if err != nil {
-	// 	tlog.Warn.Printf("ino%d fh%d: write: prealloc failed: %s", f.qIno.Ino, int(f.fd.Fd()), err.Error())
-	// 	return 0, fuse.ToStatus(err)
-	// }
+	err = syscallcompat.EnospcPrealloc(int(f.fd.Fd()), cOff, int64(len(ciphertext)))
+	if err != nil {
+		tlog.Warn.Printf("ino%d fh%d: write: prealloc failed: %s", f.qIno.Ino, int(f.fd.Fd()), err.Error())
+		return 0, fuse.ToStatus(err)
+	}
 	// Write
 	_, err = f.fd.WriteAt(ciphertext, cOff)
 	// Return memory to CReqPool
