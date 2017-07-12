@@ -8,8 +8,10 @@ import (
 )
 
 const (
+	// DES - Crypt type: software DES
+	DES = 1 + iota
 	// AES128 - Crypt type: software AES128
-	AES128 = 1 + iota
+	AES128
 	// AES192 - Crypt type: software AES192
 	AES192
 	// AES256 - Crypt type: software AES256
@@ -19,6 +21,8 @@ const (
 func keyLen(mode int) int {
 	keyLen := 0
 	switch mode {
+	case DES:
+		keyLen = DESKeySize
 	case AES128:
 		keyLen = AES128KeySize
 	case AES192:
@@ -46,6 +50,8 @@ func NewCoreCrypter(mode int, key []byte) CoreCrypter {
 		tlog.Fatal.Printf("Key length error, expected: %d, actual: %d", l, len(key))
 	}
 	switch mode {
+	case DES:
+		return NewDesCrypter(key)
 	case AES128:
 		fallthrough
 	case AES192:

@@ -67,8 +67,8 @@ func (ac *AesCrypter) EncryptWithIV(dest, src []byte, iv []byte) {
 
 // Encrypt encrypt plain
 // It's important to remember that ciphertexts must be authenticated
-// (i.e. by using crypto/hmac) as well as being encrypted in order to be secure.
-// authentication will be down outside cryptor, to include file ID and block No.
+// (i.e. by using crypto/hmdc) as well as being encrypted in order to be secure.
+// authentication will be done outside core crypter, (in content encrypter) to include file ID and block No.
 func (ac *AesCrypter) Encrypt(dest, src []byte) error {
 	ac.EncryptWithIV(dest, src, RandBytes(ac.blockSize))
 	return nil

@@ -20,11 +20,12 @@ const currentVersion = 0
 
 // cipherConfig is the content of a config file.
 type cipherConfig struct {
-	Version   int
-	KeyFile   string
-	CryptType int
-	PlainBS   int
-	PlainPath bool
+	Version      int
+	KeyFile      string
+	cryptType    int
+	CryptTypeStr string
+	PlainBS      int
+	PlainPath    bool
 }
 
 // initCipherDir initialize a cipher directory
@@ -32,11 +33,12 @@ func initCipherDir(cipherDir string) {
 	var input string
 	var conf cipherConfig
 	conf.Version = currentVersion
-	for conf.CryptType == 0 {
-		fmt.Printf("Choose an encryption type (AES128/AES192/AES256): ")
+	for conf.cryptType == 0 {
+		fmt.Printf("Choose an encryption type (DES/AES128/AES192/AES256): ")
 		input = ""
 		fmt.Scanln(&input)
-		conf.CryptType = str2CryptType(input)
+		conf.CryptTypeStr = input
+		conf.cryptType = str2CryptType(input)
 	}
 	for conf.PlainBS == 0 {
 		fmt.Printf("Choose a block size(1: 2KB; 2: 4KB; 3: 8KB; 4:16KB): ")
@@ -50,7 +52,7 @@ func initCipherDir(cipherDir string) {
 	input = strings.Trim(input, " \t")
 	conf.PlainPath = (strings.ToUpper(input) == "N")
 
-	generateKey(filepath.Join(cipherDir, cffuse.KeyFile), conf.CryptType)
+	generateKey(filepath.Join(cipherDir, cffuse.KeyFile), conf.cryptType)
 
 	err := saveConf(filepath.Join(cipherDir, cffuse.ConfFile), conf)
 	if err != nil {
@@ -88,8 +90,13 @@ func readConf(path string) (cf cipherConfig) {
 	}
 	// Unmarshal
 	err = json.Unmarshal(js, &cf)
-	if err != nil || cf.CryptType == 0 {
+	if err != nil {
 		tlog.Fatal.Printf("Failed to parse config file")
+		os.Exit(exitcode.Config)
+	}
+	cf.cryptType = str2CryptType(cf.CryptTypeStr)
+	if cf.cryptType == 0 {
+		tlog.Fatal.Printf("Wrong crypt type: %s", cf.CryptTypeStr)
 		os.Exit(exitcode.Config)
 	}
 	return
@@ -137,6 +144,8 @@ func generateKey(path string, cryptType int) {
 // String get string value of crypttype
 func cryptType2Str(ct int) string {
 	switch ct {
+	case corecrypter.DES:
+		return "DES"
 	case corecrypter.AES128:
 		return "AES128"
 	case corecrypter.AES192:
@@ -151,6 +160,8 @@ func cryptType2Str(ct int) string {
 // Set crypttype with string
 func str2CryptType(str string) int {
 	switch strings.ToUpper(str) {
+	case "DES":
+		return corecrypter.DES
 	case "AES128":
 		return corecrypter.AES128
 	case "AES192":

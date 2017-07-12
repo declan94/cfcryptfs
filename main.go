@@ -45,7 +45,7 @@ func main() {
 		CipherDir:  args.cipherDir,
 		AllowOther: args.allowOther,
 		CryptKey:   key,
-		CryptType:  conf.CryptType,
+		CryptType:  conf.cryptType,
 		PlainBS:    conf.PlainBS,
 		PlainPath:  conf.PlainPath,
 	}
