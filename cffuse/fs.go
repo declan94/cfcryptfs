@@ -86,6 +86,28 @@ func (fs *CfcryptFS) Create(path string, flags uint32, mode uint32, context *fus
 
 // Open implements pathfs.Filesystem.
 func (fs *CfcryptFS) Open(path string, flags uint32, context *fuse.Context) (fuseFile nodefs.File, status fuse.Status) {
+	f, st := fs.open(path, flags, context)
+	if st != fuse.OK {
+		return nil, st
+	}
+	var attr fuse.Attr
+	st = f.GetAttr(&attr)
+	if st != fuse.OK {
+		return nil, st
+	}
+	var mode uint32 = 1
+	if flags&uint32(os.O_WRONLY) > 0 {
+		mode = 2
+	} else if flags&uint32(os.O_RDWR) > 0 {
+		mode = 6
+	}
+	if !fs.access(&attr, mode, context) {
+		return nil, fuse.EACCES
+	}
+	return f, fuse.OK
+}
+
+func (fs *CfcryptFS) open(path string, flags uint32, context *fuse.Context) (fuseFile nodefs.File, status fuse.Status) {
 	newFlags := fs.mangleOpenFlags(flags)
 	upath, err := fs.getUnderlyingPath(path)
 	if err != nil {
@@ -119,7 +141,7 @@ func (fs *CfcryptFS) Chmod(path string, mode uint32, context *fuse.Context) (cod
 		return status
 	}
 	if a.IsRegular() {
-		f, status := fs.Open(path, uint32(os.O_RDWR), context)
+		f, status := fs.open(path, uint32(os.O_RDWR), context)
 		if status != fuse.OK {
 			return status
 		}
@@ -175,7 +197,7 @@ func (fs *CfcryptFS) GetAttr(path string, context *fuse.Context) (*fuse.Attr, fu
 		return a, status
 	}
 	if a.IsRegular() {
-		f, status := fs.Open(path, uint32(os.O_RDWR), context)
+		f, status := fs.open(path, uint32(os.O_RDWR), context)
 		if status != fuse.OK {
 			return nil, status
 		}
@@ -222,7 +244,7 @@ func (fs *CfcryptFS) OpenDir(path string, context *fuse.Context) (stream []fuse.
 				Name: n,
 			}
 			if infos[i].Mode().IsRegular() {
-				f, status := fs.Open(filepath.Join(path, n), uint32(os.O_RDWR), context)
+				f, status := fs.open(filepath.Join(path, n), uint32(os.O_RDWR), context)
 				if status != fuse.OK {
 					tlog.Warn.Printf("Open file to get mode failed: %s", infos[i].Name())
 					continue

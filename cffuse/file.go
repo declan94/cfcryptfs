@@ -156,14 +156,14 @@ func (f *file) Chmod(mode uint32) fuse.Status {
 }
 
 func (f *file) Read(buf []byte, off int64) (resultData fuse.ReadResult, code fuse.Status) {
-	var attr fuse.Attr
-	st := f.GetAttr(&attr)
-	if st != fuse.OK {
-		return nil, st
-	}
-	if !f.fs.access(&attr, 4, f.context) {
-		return nil, fuse.EACCES
-	}
+	// var attr fuse.Attr
+	// st := f.GetAttr(&attr)
+	// if st != fuse.OK {
+	// 	return nil, st
+	// }
+	// if !f.fs.access(&attr, 4, f.context) {
+	// 	return nil, fuse.EACCES
+	// }
 	out, status := f.read(uint64(off), len(buf))
 	return fuse.ReadResultData(out), status
 }
@@ -255,14 +255,14 @@ func (f *file) Write(data []byte, off int64) (uint32, fuse.Status) {
 		tlog.Warn.Printf("ino%d fh%d: Write on released file", f.qIno.Ino, int(f.fd.Fd()))
 		return 0, fuse.EBADF
 	}
-	var attr fuse.Attr
-	st := f.GetAttr(&attr)
-	if st != fuse.OK {
-		return 0, st
-	}
-	if !f.fs.access(&attr, 2, f.context) {
-		return 0, fuse.EACCES
-	}
+	// var attr fuse.Attr
+	// st := f.GetAttr(&attr)
+	// if st != fuse.OK {
+	// 	return 0, st
+	// }
+	// if !f.fs.access(&attr, 2, f.context) {
+	// 	return 0, fuse.EACCES
+	// }
 	f.ent.contentLock.Lock()
 	defer f.ent.contentLock.Unlock()
 	tlog.Debug.Printf("ino%d: FUSE Write: offset=%d length=%d", f.qIno.Ino, off, len(data))
