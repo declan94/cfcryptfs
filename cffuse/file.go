@@ -61,6 +61,8 @@ type file struct {
 	lastOpCount uint64
 	// Parent filesystem
 	fs *CfcryptFS
+	// fuse context
+	context *fuse.Context
 	// We embed a nodefs.NewDefaultFile() that returns ENOSYS for every operation we
 	// have not implemented. This prevents build breakage when the go-fuse library
 	// adds new methods to the nodefs.File interface.
@@ -68,7 +70,7 @@ type file struct {
 }
 
 // NewFile returns a new go-fuse File instance.
-func newFile(fd *os.File, fs *CfcryptFS) (*file, fuse.Status) {
+func newFile(fd *os.File, fs *CfcryptFS, ctx *fuse.Context) (*file, fuse.Status) {
 	var st syscall.Stat_t
 	err := syscall.Fstat(int(fd.Fd()), &st)
 	if err != nil {
@@ -90,6 +92,7 @@ func newFile(fd *os.File, fs *CfcryptFS) (*file, fuse.Status) {
 		ent:          ent,
 		loopbackFile: nodefs.NewLoopbackFile(fd),
 		fs:           fs,
+		context:      ctx,
 		File:         nodefs.NewDefaultFile(),
 	}
 
@@ -153,6 +156,14 @@ func (f *file) Chmod(mode uint32) fuse.Status {
 }
 
 func (f *file) Read(buf []byte, off int64) (resultData fuse.ReadResult, code fuse.Status) {
+	var attr fuse.Attr
+	st := f.GetAttr(&attr)
+	if st != fuse.OK {
+		return nil, st
+	}
+	if !f.fs.access(&attr, 4, f.context) {
+		return nil, fuse.EACCES
+	}
 	out, status := f.read(uint64(off), len(buf))
 	return fuse.ReadResultData(out), status
 }
@@ -244,6 +255,14 @@ func (f *file) Write(data []byte, off int64) (uint32, fuse.Status) {
 		tlog.Warn.Printf("ino%d fh%d: Write on released file", f.qIno.Ino, int(f.fd.Fd()))
 		return 0, fuse.EBADF
 	}
+	var attr fuse.Attr
+	st := f.GetAttr(&attr)
+	if st != fuse.OK {
+		return 0, st
+	}
+	if !f.fs.access(&attr, 2, f.context) {
+		return 0, fuse.EACCES
+	}
 	f.ent.contentLock.Lock()
 	defer f.ent.contentLock.Unlock()
 	tlog.Debug.Printf("ino%d: FUSE Write: offset=%d length=%d", f.qIno.Ino, off, len(data))
@@ -274,7 +293,6 @@ func (f *file) Write(data []byte, off int64) (uint32, fuse.Status) {
 //
 // Empty writes do nothing and are allowed.
 func (f *file) write(data []byte, off int64) (uint32, fuse.Status) {
-	// Make sure we have the file ID.
 	if err := f.loadHeader(); err != nil {
 		tlog.Debug.Printf("Read failed1: %s", err)
 		return 0, fuse.ToStatus(err)

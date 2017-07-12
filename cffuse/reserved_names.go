@@ -25,3 +25,7 @@ func init() {
 func IsNameReserved(name string) bool {
 	return ReservedNameMap[name]
 }
+
+func (fs *CfcryptFS) isNameReserved(name string) bool {
+	return fs.configs.PlainPath && IsNameReserved(name)
+}
