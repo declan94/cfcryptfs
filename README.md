@@ -7,9 +7,11 @@
 Cfcryptfs is an extensible encrypted filesystem implemented on FUSE (Filesystem in User Space) for linux, 
 inspired by some excellent ideas from [gocryptfs](https://github.com/rfjakob/gocryptfs), [encfs](https://github.com/vgough/encfs) and [securefs](https://github.com/netheril96/securefs)
 
-As the value of data becomes more and more important, security of data is getting more and more attention. We want our critical private data to be safe and confidential, which means people without authorization should have no chance to access or temper your data. Cfcryptfs can help you achieve this simply. Using cfcryptfs, only encrypted data will be stored on disk.
+As the value of data becomes more and more important, security of data is getting more and more attention. We want our critical private data to be safe and confidential, which means people without authorization should have no chance to access or tamper your data. 
 
-Further more, many people and companies choose to store their files and data on Internet storage services nowadays, such as Google Drive, AWS S3, Alibaba OSS and Alibaba NAS. Despite the greate convenient these Internet storage services bring to us, they also bring us risks like leak of confidential data, malicious tampering of data. Using cfcryptfs can avoid these risks by encrypting your files and data in a total secure way before uploading them to those internet storage services. Also, the process of encryption and decryption is transparent to users and programs. 
+Further more, many people and companies choose to store their files and data on Internet storage services nowadays, such as Google Drive, AWS S3, Alibaba OSS and Alibaba NAS. Despite the greate convenience these Internet storage services bring to us, they also dramatically increase the risks like leak of confidential data, malicious tampering of data. 
+
+Using cfcryptfs can avoid these risks by encrypting your files and data in a total secure way before uploading them to those internet storage services. Also, the process of encryption and decryption is transparent to users and programs, which makes integration very simple. 
 
 ## Platform
 
