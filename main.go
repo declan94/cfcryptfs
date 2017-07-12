@@ -27,6 +27,11 @@ func main() {
 		return
 	}
 
+	if args.info {
+		infoCipherDir(args.cipherDir)
+		return
+	}
+
 	if !args.foreground {
 		os.Exit(forkChild())
 	}

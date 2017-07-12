@@ -59,11 +59,27 @@ func initCipherDir(cipherDir string) {
 		tlog.Fatal.Printf("Write conf file failed: %s\n", err)
 		os.Exit(exitcode.Config)
 	}
+
+	tlog.Info.Printf("\nInitialize directory finished: %s", cipherDir)
+	tlog.Info.Printf(conf.String())
+}
+
+func infoCipherDir(cipherDir string) {
+	conf := loadConf(cipherDir)
+	tlog.Info.Printf("Cipher Directory: %s", cipherDir)
+	tlog.Info.Printf(conf.String())
 }
 
 // loadConf load config of the cipher directory
 func loadConf(cipherDir string) cipherConfig {
-	conf := readConf(filepath.Join(cipherDir, cffuse.ConfFile))
+	cfpath := filepath.Join(cipherDir, cffuse.ConfFile)
+	_, err := os.Stat(cfpath)
+	if os.IsNotExist(err) {
+		tlog.Fatal.Printf("Not a valid cfcryptfs cipher directory: %s", cipherDir)
+		tlog.Info.Printf("To init an empty cipher directory, use 'cfcryptfs -init %s'", cipherDir)
+		os.Exit(exitcode.Config)
+	}
+	conf := readConf(cfpath)
 	if conf.Version != currentVersion {
 		tlog.Fatal.Printf("Version not matched: cipherdir(%d) != current(%d)\n", conf.Version, currentVersion)
 		os.Exit(exitcode.Config)
@@ -169,7 +185,7 @@ func str2CryptType(str string) int {
 	case "AES256":
 		return corecrypter.AES256
 	default:
-		fmt.Printf("Unkown encryption type: %s\n We only have (AES128/AES192/AES256)\n", str)
+		fmt.Printf("Unkown encryption type: %s\n We only have (DES/AES128/AES192/AES256)\n", str)
 	}
 	return 0
 }
@@ -187,4 +203,9 @@ func blockSize(index int) int {
 	default:
 		return 0
 	}
+}
+
+func (cfg *cipherConfig) String() string {
+	return fmt.Sprintf("On-disk Version: %d\nEncryption Type: %s\nPlaintext Block Size: %.2fKB\nEncrypt Filepath: %v\n",
+		cfg.Version, cfg.CryptTypeStr, float32(cfg.PlainBS)/1024, !cfg.PlainPath)
 }
