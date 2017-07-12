@@ -13,13 +13,13 @@ Further more, many people and companies choose to store their files and data on 
 
 ## Platform
 
-Cfcryptfs now only support linux system, supports for other systems are under developing.
+Cfcryptfs now only supports linux system. Supports for other systems are under developing.
 
 ## Install
 
-You can only install by source code currently. You have to install go tools first, see [here](https://golang.org/doc/install#install)
+For now, you can only install cfcryptfs by source code. You have to install go tools first, see [here](https://golang.org/doc/install#install)
 
-After that, run commands below:
+After that, execute commands below:
 ```
 $ go get -u github.com/Declan94/cfcryptfs
 $ sudo cp `go env GOPATH`/bin/cfcryptfs /usr/local/bin
