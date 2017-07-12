@@ -57,7 +57,7 @@ Support multiple core encryption methods(AES128/AES192/AES256).  You can also cr
 Besides encryption methods, You can also choose different encryption block size, whether encrypt filepath, etc. This is important because different application and work environment often have different demands for the filesystem.
 
 #### Secure
-* Random IV for file and blocks provides random encryption pattern.
+* Random IV for files and blocks provides random encryption pattern.
 * HMAC signature for file header provides resistence to file mode tamper. 
 * HMAC signature with file IV and block id included in the key provides resistance to content tamper and block copying tamper.
 * Generated IV from fullpath for filepath encryption provides resistance to file moving tamper. (in encrypted filepath mode)
