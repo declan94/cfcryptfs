@@ -54,6 +54,7 @@ func (f *file) Truncate(newSize uint64) fuse.Status {
 	}
 
 	// File shrinks
+	f.ent.purgeCachedBlocks()
 	blockNo := f.contentEnc.PlainOffToBlockNo(newSize)
 	cipherOff := f.contentEnc.BlockNoToCipherOff(blockNo)
 	plainOff := f.contentEnc.BlockNoToPlainOff(blockNo)
@@ -61,7 +62,7 @@ func (f *file) Truncate(newSize uint64) fuse.Status {
 	var data []byte
 	if lastBlockLen > 0 {
 		var status fuse.Status
-		data, status = f.read(plainOff, int(lastBlockLen))
+		data, status = f.read(plainOff, int(lastBlockLen), false)
 		if status != fuse.OK {
 			tlog.Warn.Printf("Truncate: shrink doRead returned error: %v", err)
 			return status

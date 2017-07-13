@@ -45,7 +45,7 @@ type file struct {
 	// Device and inode number uniquely identify the backing file
 	qIno QIno
 	// baking file entry
-	ent *entry
+	ent *nodeEntry
 	// HeaderLock guards the file header (in this struct) and the file header (on
 	// disk). Take HeaderLock.RLock() to make sure the file header does not change
 	// behind your back. If you modify the file header, you must take
@@ -86,6 +86,7 @@ func newFile(fd *os.File, fs *CfcryptFS, ctx *fuse.Context) (*file, fuse.Status)
 		Ino: uint64(st.Ino),
 	}
 	ent := enttable.register(qi)
+	ent.fs = fs
 	f := &file{
 		fd:           fd,
 		contentEnc:   fs.contentCrypt,
@@ -165,7 +166,7 @@ func (f *file) Read(buf []byte, off int64) (resultData fuse.ReadResult, code fus
 	// if !f.fs.access(&attr, 4, f.context) {
 	// 	return nil, fuse.EACCES
 	// }
-	out, status := f.read(uint64(off), len(buf))
+	out, status := f.read(uint64(off), len(buf), true)
 	return fuse.ReadResultData(out), status
 }
 
@@ -177,49 +178,82 @@ func (f *file) Read(buf []byte, off int64) (resultData fuse.ReadResult, code fus
 //
 // Called by Read() for normal reading,
 // by Write() and Truncate() for Read-Modify-Write
-func (f *file) read(off uint64, length int) ([]byte, fuse.Status) {
+//
+// cache - whether cache readed blocks
+// 	when called by Write and Truncate, cause the blocks will be rewrite, so we don't cache read blocks
+func (f *file) read(off uint64, length int, cache bool) ([]byte, fuse.Status) {
 	// Make sure we have the file ID.
 	if err := f.loadHeader(); err != nil {
 		tlog.Debug.Printf("Read failed1: %s", err)
 		return nil, fuse.ToStatus(err)
 	}
-	f.ent.headerLock.RLock()
-	fileID := f.ent.header.FileID
-	// Read the backing ciphertext in one go
-	skip, alignedOffset, alignedLength := f.contentEnc.TransformPlainRange(off, length)
-	tlog.Debug.Printf("TransformRange(%d, %d) -> %d, %d, %d", off, length, alignedOffset, alignedLength, skip)
-	ciphertext := f.fs.contentCrypt.CReqPool.Get()
-	ciphertext = ciphertext[:int(alignedLength)]
-	n, err := f.fd.ReadAt(ciphertext, int64(alignedOffset))
-	f.ent.headerLock.RUnlock()
-
-	if err != nil && err != io.EOF {
-		tlog.Warn.Printf("read: ReadAt: %s", err.Error())
-		return nil, fuse.ToStatus(err)
+	// Explode plain range
+	intraBlocks := f.contentEnc.ExplodePlainRange(off, length)
+	blocks := make([][]byte, len(intraBlocks))
+	// Skip cached blocks in front or at end.
+	// Only to read those in the middle
+	var left, right int
+	for left = 0; left < len(intraBlocks); left++ {
+		cached := f.ent.getCachedBlock(intraBlocks[left].BlockNo)
+		blocks[left] = cached
+		if cached == nil {
+			break
+		}
 	}
-	// The ReadAt came back empty. We can skip all the decryption and return early.
-	if n == 0 {
+	for right = len(intraBlocks) - 1; right > left; right-- {
+		cached := f.ent.getCachedBlock(intraBlocks[right].BlockNo)
+		if cached == nil {
+			break
+		}
+	}
+	tlog.Debug.Printf("TransformRange(%d, %d) -> Block(%d - %d)", off, length, intraBlocks[0].BlockNo, intraBlocks[len(intraBlocks)-1].BlockNo)
+	tlog.Debug.Printf("Not cached blocks (%d - %d)", intraBlocks[left].BlockNo, intraBlocks[right].BlockNo)
+	// If left > right, all blocks have read from cache, no need to read file
+	if left <= right {
+		f.ent.headerLock.RLock()
+		fileID := f.ent.header.FileID
+		cipherlen := f.fs.contentCrypt.CipherBS() * (right - left + 1)
+		offset := f.fs.contentCrypt.BlockNoToCipherOff(intraBlocks[left].BlockNo)
+		ciphertext := f.fs.contentCrypt.CReqPool.Get()
+		ciphertext = ciphertext[:int(cipherlen)]
+		n, err := f.fd.ReadAt(ciphertext, int64(offset))
+		f.ent.headerLock.RUnlock()
+		if err != nil && err != io.EOF {
+			tlog.Warn.Printf("read ReadAt error: %s", err.Error())
+			return nil, fuse.ToStatus(err)
+		}
+		// Truncate ciphertext buffer down to actually read bytes
+		ciphertext = ciphertext[0:n]
+		// Decrypt it
+		plainBlocks, err := f.contentEnc.DecryptBlocks(ciphertext, intraBlocks[left].BlockNo, fileID)
+		if n < len(ciphertext) {
+			blocks = blocks[:left+len(plainBlocks)-1]
+			if right < len(intraBlocks)-1 {
+				tlog.Warn.Printf("unexpected extra cached block or read interuptted")
+			}
+		}
 		f.fs.contentCrypt.CReqPool.Put(ciphertext)
-		return nil, fuse.OK
-	}
-	// Truncate ciphertext buffer down to actually read bytes
-	ciphertext = ciphertext[0:n]
-
-	firstBlockNo := f.contentEnc.CipherOffToBlockNo(alignedOffset)
-	tlog.Debug.Printf("ReadAt offset=%d bytes (%d blocks), want=%d, got=%d", alignedOffset, firstBlockNo, alignedLength, n)
-
-	// Decrypt it
-	plaintext, err := f.contentEnc.DecryptBlocks(ciphertext, firstBlockNo, fileID)
-	f.fs.contentCrypt.CReqPool.Put(ciphertext)
-	if err != nil {
-		curruptBlockNo := firstBlockNo + f.contentEnc.PlainOffToBlockNo(uint64(len(plaintext)))
-		tlog.Warn.Printf("ino%d: doRead: corrupt block #%d: %v", f.qIno.Ino, curruptBlockNo, err)
-		return nil, fuse.EIO
+		if err != nil {
+			tlog.Warn.Printf("ino%d: read failed: %v", f.qIno.Ino, err)
+			return nil, fuse.EIO
+		}
+		for i, block := range plainBlocks {
+			blocks[left+i] = block
+			if cache {
+				f.ent.cacheBlock(intraBlocks[left+i].BlockNo, block)
+			}
+		}
 	}
 
 	// Crop down to the relevant part
 	var out []byte
+	pBuf := bytes.NewBuffer(f.contentEnc.PReqPool.Get()[:0])
+	for _, block := range blocks {
+		pBuf.Write(block)
+	}
+	plaintext := pBuf.Bytes()
 	lenHave := len(plaintext)
+	skip := intraBlocks[0].Skip
 	lenWant := int(skip + length)
 	if lenHave > lenWant {
 		out = plaintext[skip:lenWant]
@@ -227,8 +261,6 @@ func (f *file) read(off uint64, length int) ([]byte, fuse.Status) {
 		out = plaintext[skip:lenHave]
 	}
 	// else: out stays empty, file was smaller than the requested offset
-
-	f.fs.contentCrypt.PReqPool.Put(plaintext)
 
 	return out, fuse.OK
 }
@@ -308,11 +340,15 @@ func (f *file) write(data []byte, off int64) (uint32, fuse.Status) {
 		blockData := dataBuf.Next(int(b.Length))
 		// Incomplete block -> Read-Modify-Write
 		if b.Partial {
-			// Read
-			oldData, status := f.read(f.contentEnc.BlockNoToPlainOff(b.BlockNo), f.contentEnc.PlainBS())
-			if status != fuse.OK {
-				tlog.Warn.Printf("ino%d fh%d: RMW read failed: %s", f.qIno.Ino, int(f.fd.Fd()), status.String())
-				return 0, status
+			oldData := f.ent.getCachedBlock(b.BlockNo)
+			if oldData == nil {
+				// Read
+				var status fuse.Status
+				oldData, status = f.read(f.contentEnc.BlockNoToPlainOff(b.BlockNo), f.contentEnc.PlainBS(), false)
+				if status != fuse.OK {
+					tlog.Warn.Printf("ino%d fh%d: RMW read failed: %s", f.qIno.Ino, int(f.fd.Fd()), status.String())
+					return 0, status
+				}
 			}
 			// Modify
 			blockData = f.contentEnc.RewriteBlock(oldData, blockData, int(b.Skip))
@@ -322,6 +358,7 @@ func (f *file) write(data []byte, off int64) (uint32, fuse.Status) {
 			f.qIno.Ino, uint64(len(blockData))-f.contentEnc.BlockOverhead(), b.BlockNo)
 		// Write into the to-encrypt list
 		toEncrypt[i] = blockData
+		f.ent.cacheBlock(b.BlockNo, blockData)
 	}
 	// Encrypt all blocks
 	ciphertext, err := f.contentEnc.EncryptBlocks(toEncrypt, blocks[0].BlockNo, f.ent.header.FileID)
