@@ -9,7 +9,7 @@ import (
 
 const (
 	// DES - Crypt type: software DES
-	DES = 1 + iota
+	DES = iota + 1
 	// AES128 - Crypt type: software AES128
 	AES128
 	// AES192 - Crypt type: software AES192

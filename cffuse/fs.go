@@ -95,7 +95,7 @@ func (fs *CfcryptFS) Open(path string, flags uint32, context *fuse.Context) (fus
 	if st != fuse.OK {
 		return nil, st
 	}
-	var mode uint32
+	var mode uint32 = 4
 	if flags&uint32(os.O_WRONLY) > 0 {
 		mode = 2
 	} else if flags&uint32(os.O_RDWR) > 0 {

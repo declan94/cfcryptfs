@@ -38,7 +38,7 @@ func main() {
 	}
 
 	conf := cli.LoadConf(args.CipherDir)
-	key := cli.LoadKey(args.CipherDir, args.PwdFile)
+	key := cli.LoadKey(args.CipherDir, args.PwdFile, args.Password)
 	// Check mountpoint
 	// We cannot mount "/home/user/.cipher" at "/home/user" because the mount
 	// will hide ".cipher" also for us.
@@ -140,6 +140,6 @@ func handleSigint(srv *fuse.Server, mountpoint string) {
 				cmd.Run()
 			}
 		}
-		os.Exit(exitcode.SigInt)
+		os.Exit(0)
 	}()
 }

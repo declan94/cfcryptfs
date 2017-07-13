@@ -21,7 +21,6 @@ const currentVersion = 0
 // CipherConfig is the content of a config file.
 type CipherConfig struct {
 	Version      int
-	KeyFile      string
 	CryptType    int
 	CryptTypeStr string
 	PlainBS      int
@@ -54,7 +53,7 @@ func InitCipherDir(cipherDir string) {
 
 	generateKey(filepath.Join(cipherDir, cffuse.KeyFile), conf.CryptType)
 
-	err := saveConf(filepath.Join(cipherDir, cffuse.ConfFile), conf)
+	err := SaveConf(filepath.Join(cipherDir, cffuse.ConfFile), conf)
 	if err != nil {
 		tlog.Fatal.Printf("Write conf file failed: %s\n", err)
 		os.Exit(exitcode.Config)
@@ -80,7 +79,7 @@ func LoadConf(cipherDir string) CipherConfig {
 		tlog.Info.Printf("To init an empty cipher directory, use 'cfcryptfs -init %s'", cipherDir)
 		os.Exit(exitcode.Config)
 	}
-	conf := readConf(cfpath)
+	conf := ReadConf(cfpath)
 	if conf.Version != currentVersion {
 		tlog.Fatal.Printf("Version not matched: cipherdir(%d) != current(%d)\n", conf.Version, currentVersion)
 		os.Exit(exitcode.Config)
@@ -89,8 +88,8 @@ func LoadConf(cipherDir string) CipherConfig {
 }
 
 // LoadKey load encryption key of the cipher directory
-func LoadKey(cipherDir string, pwdfile string) []byte {
-	key, err := keycrypter.LoadKey(filepath.Join(cipherDir, cffuse.KeyFile), pwdfile)
+func LoadKey(cipherDir string, pwdfile string, password string) []byte {
+	key, err := keycrypter.LoadKey(filepath.Join(cipherDir, cffuse.KeyFile), pwdfile, password)
 	if err != nil {
 		tlog.Fatal.Println(err)
 		os.Exit(exitcode.KeyFile)
@@ -98,7 +97,8 @@ func LoadKey(cipherDir string, pwdfile string) []byte {
 	return key
 }
 
-func readConf(path string) (cf CipherConfig) {
+// ReadConf read cipher conf from file and parse it
+func ReadConf(path string) (cf CipherConfig) {
 	// Read from disk
 	js, err := ioutil.ReadFile(path)
 	if err != nil {
@@ -119,7 +119,8 @@ func readConf(path string) (cf CipherConfig) {
 	return
 }
 
-func saveConf(path string, cf CipherConfig) error {
+// SaveConf save cipher conf file to disk
+func SaveConf(path string, cf CipherConfig) error {
 	fd, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0600)
 	if err != nil {
 		return err

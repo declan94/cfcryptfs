@@ -11,16 +11,19 @@ import (
 // LoadKey loads key from the encrypted key file
 // 	path - the encrypted key file path
 //  pwdfile - file stores the encryption file, pass "" to read from cli
-func LoadKey(path string, pwdfile string) ([]byte, error) {
+//  password - specified password in cli
+func LoadKey(path string, pwdfile string, password string) ([]byte, error) {
 	encKey, err := ioutil.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("Read key file failed: %v", err)
 	}
-	extpwd := pwdfile
-	if extpwd != "" {
-		extpwd = "/bin/cat -- " + extpwd
+	if password == "" {
+		extpwd := pwdfile
+		if extpwd != "" {
+			extpwd = "/bin/cat -- " + extpwd
+		}
+		password, err = readpwd.Once(extpwd)
 	}
-	password, err := readpwd.Once(extpwd)
 	if err != nil {
 		return nil, fmt.Errorf("Read password failed: %v", err)
 

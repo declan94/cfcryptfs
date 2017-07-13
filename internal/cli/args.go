@@ -21,6 +21,7 @@ type Args struct {
 	CipherDir  string
 	MountPoint string
 	PwdFile    string
+	Password   string
 	DebugFuse  bool
 	Debug      bool
 	Init       bool
@@ -47,10 +48,10 @@ func printMyFlagSet(avoid map[string]bool) {
 
 func usage() {
 	fmt.Printf("Usage: %s [options] CIPHERDIR MOUNTPOINT\n", path.Base(os.Args[0]))
-	fmt.Printf("   or: %s -Init|-Info CIPHERDIR\n", path.Base(os.Args[0]))
+	fmt.Printf("   or: %s -init|-info CIPHERDIR\n", path.Base(os.Args[0]))
 	fmt.Printf("\noptions:\n")
 	printMyFlagSet(map[string]bool{
-		"Debug":      true,
+		"debug":      true,
 		"parent_pid": true,
 	})
 	os.Exit(exitcode.Usage)
@@ -61,10 +62,11 @@ func ParseArgs() (args Args) {
 	flagSet = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 
 	flagSet.StringVar(&args.PwdFile, "passfile", "", "Password file path.")
+	flagSet.StringVar(&args.Password, "password", "", "Specify password.")
 	flagSet.BoolVar(&args.DebugFuse, "debugfuse", false, "Show fuse Debug messages.")
-	flagSet.BoolVar(&args.Debug, "Debug", false, "Debug mode - internal use")
-	flagSet.BoolVar(&args.Init, "Init", false, "Initialize a cipher directory.")
-	flagSet.BoolVar(&args.Info, "Info", false, "Print infomation about a cipher directory.")
+	flagSet.BoolVar(&args.Debug, "debug", false, "Debug mode - internal use")
+	flagSet.BoolVar(&args.Init, "init", false, "Initialize a cipher directory.")
+	flagSet.BoolVar(&args.Info, "info", false, "Print infomation about a cipher directory.")
 	flagSet.BoolVar(&args.Foreground, "f", false, "Run in the Foreground.")
 	flagSet.BoolVar(&args.AllowOther, "allow_other", false, "Allow other users to access the filesystem. \nOnly works if user_allow_other is set in /etc/fuse.conf.")
 	flagSet.IntVar(&args.ParentPid, "parent_pid", 0, "Parent process pid - internal use")
