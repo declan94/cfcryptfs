@@ -129,16 +129,17 @@ func (cc *ContentCrypter) DecryptBlocks(cipher []byte, firstBlockNo uint64, file
 	cBuf := bytes.NewBuffer(cipher)
 	var err error
 	blocks := make([][]byte, (len(cipher)-1)/cc.cipherBS+1)
+	blockNo := firstBlockNo
 	for cBuf.Len() > 0 {
 		cBlock := cBuf.Next(int(cc.cipherBS))
 		var pBlock []byte
-		if pBlock, err = cc.decryptBlock(cBlock, firstBlockNo, fileID); err != nil {
+		if pBlock, err = cc.decryptBlock(cBlock, blockNo, fileID); err != nil {
 			tlog.Warn.Printf("Decryption Block#%d Error: %v\n", firstBlockNo, err)
 			return nil, err
 		}
-		blocks[firstBlockNo] = pBlock
+		blocks[blockNo-firstBlockNo] = pBlock
 		cc.pBlockPool.Put(pBlock)
-		firstBlockNo++
+		blockNo++
 	}
 	return blocks, err
 }

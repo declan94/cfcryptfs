@@ -8,4 +8,5 @@ const (
 	plainDir  = "/tmp/test_cfcrptfs/plain"
 	password  = "CfcryptfsTestPwd"
 	command   = "cfcryptfs"
+	fsMounted = true
 )

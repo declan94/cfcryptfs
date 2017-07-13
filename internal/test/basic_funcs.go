@@ -2,7 +2,6 @@ package test
 
 import (
 	"os"
-	"syscall"
 
 	"log"
 
@@ -10,15 +9,11 @@ import (
 
 	"os/exec"
 
-	"time"
-
 	"github.com/declan94/cfcryptfs/cffuse"
 	"github.com/declan94/cfcryptfs/corecrypter"
 	"github.com/declan94/cfcryptfs/internal/cli"
 	"github.com/declan94/cfcryptfs/keycrypter"
 )
-
-var cmd *exec.Cmd
 
 func defaultConfig() *cli.CipherConfig {
 	return &cli.CipherConfig{
@@ -67,17 +62,10 @@ func initFs(cfg *cli.CipherConfig) {
 }
 
 func mountFs() {
-	cmd = exec.Command(command, "-f", "-password", password, cipherDir, plainDir)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	err := cmd.Start()
+	cmd := exec.Command(command, "-password", password, cipherDir, plainDir)
+	err := cmd.Run()
 	if err != nil {
-		log.Fatalf("Cmd start failed: %v", err)
-	}
-	time.Sleep(200 * time.Millisecond)
-	if cmd.ProcessState != nil {
-		log.Fatalln("Cmd unexcepted exited.")
+		log.Fatalf("Mount failed: %v", err)
 	}
 }
 
@@ -88,12 +76,11 @@ func initMountFs() {
 }
 
 func umountFs() {
-	cmd.Process.Signal(syscall.SIGTERM)
-	err := cmd.Wait()
+	cmd := exec.Command("fusermount", "-q", "-u", "-z", plainDir)
+	err := cmd.Run()
 	if err != nil {
-		log.Fatalln("Cmd not run normally: ", err)
+		log.Fatalf("Umount failed: %v", err)
 	}
-	cmd = nil
 }
 
 func getPath(relpath string) string {
