@@ -49,6 +49,7 @@ func (ent *nodeEntry) removeCachedBlock(blockNo uint64) {
 }
 
 func (ent *nodeEntry) purgeCachedBlocks() {
+	tlog.Debug.Printf("Purge block caches")
 	cache := ent.getBlockCache()
 	if cache != nil {
 		cache.Purge()

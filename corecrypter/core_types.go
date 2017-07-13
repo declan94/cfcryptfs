@@ -33,14 +33,19 @@ func keyLen(mode int) int {
 	return keyLen
 }
 
-// RandomKey generate a random key
-func RandomKey(mode int) ([]byte, error) {
-	key := make([]byte, keyLen(mode))
-	if _, err := io.ReadFull(rand.Reader, key); err != nil {
-		tlog.Warn.Printf("Generate random key for mode(%d) failed: %s", mode, err)
+// RandomBytes generate a random bytes
+func RandomBytes(len int) ([]byte, error) {
+	data := make([]byte, len)
+	if _, err := io.ReadFull(rand.Reader, data); err != nil {
+		tlog.Warn.Printf("Generate random bytes failed: %v", err)
 		return nil, err
 	}
-	return key, nil
+	return data, nil
+}
+
+// RandomKey generate a random key
+func RandomKey(mode int) ([]byte, error) {
+	return RandomBytes(keyLen(mode))
 }
 
 // NewCoreCrypter return a new CoreCrypter

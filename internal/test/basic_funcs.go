@@ -23,8 +23,8 @@ var cmd *exec.Cmd
 func defaultConfig() *cli.CipherConfig {
 	return &cli.CipherConfig{
 		Version:      0,
-		CryptType:    corecrypter.AES128,
-		CryptTypeStr: "AES128",
+		CryptType:    corecrypter.DES,
+		CryptTypeStr: "DES",
 		PlainBS:      2048,
 		PlainPath:    false,
 	}

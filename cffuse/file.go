@@ -207,7 +207,11 @@ func (f *file) read(off uint64, length int, cache bool) ([]byte, fuse.Status) {
 		}
 	}
 	tlog.Debug.Printf("TransformRange(%d, %d) -> Block(%d - %d)", off, length, intraBlocks[0].BlockNo, intraBlocks[len(intraBlocks)-1].BlockNo)
-	tlog.Debug.Printf("Not cached blocks (%d - %d)", intraBlocks[left].BlockNo, intraBlocks[right].BlockNo)
+	if left >= len(intraBlocks) {
+		tlog.Debug.Printf("All blocks cached")
+	} else {
+		tlog.Debug.Printf("Not cached blocks (%d - %d)", intraBlocks[left].BlockNo, intraBlocks[right].BlockNo)
+	}
 	// If left > right, all blocks have read from cache, no need to read file
 	if left <= right {
 		f.ent.headerLock.RLock()
@@ -240,6 +244,7 @@ func (f *file) read(off uint64, length int, cache bool) ([]byte, fuse.Status) {
 		for i, block := range plainBlocks {
 			blocks[left+i] = block
 			if cache {
+				tlog.Debug.Printf("Cache block#%d", intraBlocks[left+i].BlockNo)
 				f.ent.cacheBlock(intraBlocks[left+i].BlockNo, block)
 			}
 		}
