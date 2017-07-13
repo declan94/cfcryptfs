@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/declan94/cfcryptfs/cffuse"
+	"github.com/declan94/cfcryptfs/internal/cli"
 	"github.com/declan94/cfcryptfs/internal/exitcode"
 	"github.com/declan94/cfcryptfs/internal/tlog"
 	"github.com/hanwen/go-fuse/fuse"
@@ -20,37 +21,37 @@ import (
 )
 
 func main() {
-	var args = parseArgs()
+	var args = cli.ParseArgs()
 
-	if args.init {
-		initCipherDir(args.cipherDir)
+	if args.Init {
+		cli.InitCipherDir(args.CipherDir)
 		return
 	}
 
-	if args.info {
-		infoCipherDir(args.cipherDir)
+	if args.Info {
+		cli.InfoCipherDir(args.CipherDir)
 		return
 	}
 
-	if !args.foreground {
+	if !args.Foreground {
 		os.Exit(forkChild())
 	}
 
-	conf := loadConf(args.cipherDir)
-	key := loadKey(args.cipherDir, args.pwdFile)
+	conf := cli.LoadConf(args.CipherDir)
+	key := cli.LoadKey(args.CipherDir, args.PwdFile)
 	// Check mountpoint
 	// We cannot mount "/home/user/.cipher" at "/home/user" because the mount
 	// will hide ".cipher" also for us.
-	if args.cipherDir == args.mountPoint || strings.HasPrefix(args.cipherDir, args.mountPoint+"/") {
+	if args.CipherDir == args.MountPoint || strings.HasPrefix(args.CipherDir, args.MountPoint+"/") {
 		tlog.Fatal.Printf("Mountpoint %q would shadow cipherdir %q, this is not supported",
-			args.mountPoint, args.cipherDir)
+			args.MountPoint, args.CipherDir)
 		os.Exit(exitcode.MountPoint)
 	}
 	var fsConf = cffuse.FsConfig{
-		CipherDir:  args.cipherDir,
-		AllowOther: args.allowOther,
+		CipherDir:  args.CipherDir,
+		AllowOther: args.AllowOther,
 		CryptKey:   key,
-		CryptType:  conf.cryptType,
+		CryptType:  conf.CryptType,
 		PlainBS:    conf.PlainBS,
 		PlainPath:  conf.PlainPath,
 	}
@@ -73,19 +74,19 @@ func main() {
 		MaxWrite: fuse.MAX_KERNEL_WRITE,
 		Name:     "cfcryptfs",
 	}
-	if args.allowOther {
+	if args.AllowOther {
 		mOpts.AllowOther = true
 		// Make the kernel check the file permissions for us
 		mOpts.Options = append(mOpts.Options, "default_permissions")
 	}
-	srv, err := fuse.NewServer(conn.RawFS(), args.mountPoint, &mOpts)
+	srv, err := fuse.NewServer(conn.RawFS(), args.MountPoint, &mOpts)
 
 	if err != nil {
 		fmt.Println("Start fuse server failed")
 		os.Exit(exitcode.Fuse)
 	}
 
-	srv.SetDebug(args.debugFuse)
+	srv.SetDebug(args.DebugFuse)
 
 	// All FUSE file and directory create calls carry explicit permission
 	// information. We need an unrestricted umask to create the files and
@@ -95,9 +96,9 @@ func main() {
 	// Wait for SIGINT in the background and unmount ourselves if we get it.
 	// This prevents a dangling "Transport endpoint is not connected"
 	// mountpoint if the user hits CTRL-C.
-	handleSigint(srv, args.mountPoint)
+	handleSigint(srv, args.MountPoint)
 
-	if args.parentPid > 0 {
+	if args.ParentPid > 0 {
 		// Chdir to the root directory so we don't block unmounting the CWD
 		os.Chdir("/")
 		// Switch all of our logs and the generic logger to syslog
@@ -113,7 +114,7 @@ func main() {
 			tlog.Warn.Printf("Setsid failed: %v", err)
 		}
 		// Send SIGUSR1 to our parent
-		sendUsr1(args.parentPid)
+		sendUsr1(args.ParentPid)
 	}
 
 	fmt.Println("Filesystem Mounted")

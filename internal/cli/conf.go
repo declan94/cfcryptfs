@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"encoding/json"
@@ -18,27 +18,27 @@ import (
 
 const currentVersion = 0
 
-// cipherConfig is the content of a config file.
-type cipherConfig struct {
+// CipherConfig is the content of a config file.
+type CipherConfig struct {
 	Version      int
 	KeyFile      string
-	cryptType    int
+	CryptType    int
 	CryptTypeStr string
 	PlainBS      int
 	PlainPath    bool
 }
 
-// initCipherDir initialize a cipher directory
-func initCipherDir(cipherDir string) {
+// InitCipherDir initialize a cipher directory
+func InitCipherDir(cipherDir string) {
 	var input string
-	var conf cipherConfig
+	var conf CipherConfig
 	conf.Version = currentVersion
-	for conf.cryptType == 0 {
+	for conf.CryptType == 0 {
 		fmt.Printf("Choose an encryption type (DES/AES128/AES192/AES256): ")
 		input = ""
 		fmt.Scanln(&input)
 		conf.CryptTypeStr = input
-		conf.cryptType = str2CryptType(input)
+		conf.CryptType = str2CryptType(input)
 	}
 	for conf.PlainBS == 0 {
 		fmt.Printf("Choose a block size(1: 2KB; 2: 4KB; 3: 8KB; 4:16KB): ")
@@ -52,7 +52,7 @@ func initCipherDir(cipherDir string) {
 	input = strings.Trim(input, " \t")
 	conf.PlainPath = (strings.ToUpper(input) == "N")
 
-	generateKey(filepath.Join(cipherDir, cffuse.KeyFile), conf.cryptType)
+	generateKey(filepath.Join(cipherDir, cffuse.KeyFile), conf.CryptType)
 
 	err := saveConf(filepath.Join(cipherDir, cffuse.ConfFile), conf)
 	if err != nil {
@@ -64,14 +64,15 @@ func initCipherDir(cipherDir string) {
 	tlog.Info.Printf(conf.String())
 }
 
-func infoCipherDir(cipherDir string) {
-	conf := loadConf(cipherDir)
+// InfoCipherDir print information about a cipher directory
+func InfoCipherDir(cipherDir string) {
+	conf := LoadConf(cipherDir)
 	tlog.Info.Printf("Cipher Directory: %s", cipherDir)
 	tlog.Info.Printf(conf.String())
 }
 
-// loadConf load config of the cipher directory
-func loadConf(cipherDir string) cipherConfig {
+// LoadConf load config of the cipher directory
+func LoadConf(cipherDir string) CipherConfig {
 	cfpath := filepath.Join(cipherDir, cffuse.ConfFile)
 	_, err := os.Stat(cfpath)
 	if os.IsNotExist(err) {
@@ -87,8 +88,8 @@ func loadConf(cipherDir string) cipherConfig {
 	return conf
 }
 
-// loadKey load encryption key of the cipher directory
-func loadKey(cipherDir string, pwdfile string) []byte {
+// LoadKey load encryption key of the cipher directory
+func LoadKey(cipherDir string, pwdfile string) []byte {
 	key, err := keycrypter.LoadKey(filepath.Join(cipherDir, cffuse.KeyFile), pwdfile)
 	if err != nil {
 		tlog.Fatal.Println(err)
@@ -97,7 +98,7 @@ func loadKey(cipherDir string, pwdfile string) []byte {
 	return key
 }
 
-func readConf(path string) (cf cipherConfig) {
+func readConf(path string) (cf CipherConfig) {
 	// Read from disk
 	js, err := ioutil.ReadFile(path)
 	if err != nil {
@@ -110,15 +111,15 @@ func readConf(path string) (cf cipherConfig) {
 		tlog.Fatal.Printf("Failed to parse config file")
 		os.Exit(exitcode.Config)
 	}
-	cf.cryptType = str2CryptType(cf.CryptTypeStr)
-	if cf.cryptType == 0 {
+	cf.CryptType = str2CryptType(cf.CryptTypeStr)
+	if cf.CryptType == 0 {
 		tlog.Fatal.Printf("Wrong crypt type: %s", cf.CryptTypeStr)
 		os.Exit(exitcode.Config)
 	}
 	return
 }
 
-func saveConf(path string, cf cipherConfig) error {
+func saveConf(path string, cf CipherConfig) error {
 	fd, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0600)
 	if err != nil {
 		return err
@@ -205,7 +206,7 @@ func blockSize(index int) int {
 	}
 }
 
-func (cfg *cipherConfig) String() string {
+func (cfg *CipherConfig) String() string {
 	return fmt.Sprintf("On-disk Version: %d\nEncryption Type: %s\nPlaintext Block Size: %.2fKB\nEncrypt Filepath: %v\n",
 		cfg.Version, cfg.CryptTypeStr, float32(cfg.PlainBS)/1024, !cfg.PlainPath)
 }

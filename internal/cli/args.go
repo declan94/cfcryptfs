@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"flag"
@@ -18,16 +18,16 @@ var flagSet *flag.FlagSet
 
 // Args contains cli args value
 type Args struct {
-	cipherDir  string
-	mountPoint string
-	pwdFile    string
-	debugFuse  bool
-	debug      bool
-	init       bool
-	info       bool
-	foreground bool
-	allowOther bool
-	parentPid  int
+	CipherDir  string
+	MountPoint string
+	PwdFile    string
+	DebugFuse  bool
+	Debug      bool
+	Init       bool
+	Info       bool
+	Foreground bool
+	AllowOther bool
+	ParentPid  int
 }
 
 func printMyFlagSet(avoid map[string]bool) {
@@ -47,27 +47,27 @@ func printMyFlagSet(avoid map[string]bool) {
 
 func usage() {
 	fmt.Printf("Usage: %s [options] CIPHERDIR MOUNTPOINT\n", path.Base(os.Args[0]))
-	fmt.Printf("   or: %s -init|-info CIPHERDIR\n", path.Base(os.Args[0]))
+	fmt.Printf("   or: %s -Init|-Info CIPHERDIR\n", path.Base(os.Args[0]))
 	fmt.Printf("\noptions:\n")
 	printMyFlagSet(map[string]bool{
-		"debug":      true,
+		"Debug":      true,
 		"parent_pid": true,
 	})
 	os.Exit(exitcode.Usage)
 }
 
-// parseArgs parse args from cli args
-func parseArgs() (args Args) {
+// ParseArgs parse args from cli args
+func ParseArgs() (args Args) {
 	flagSet = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 
-	flagSet.StringVar(&args.pwdFile, "passfile", "", "Password file path.")
-	flagSet.BoolVar(&args.debugFuse, "debugfuse", false, "Show fuse debug messages.")
-	flagSet.BoolVar(&args.debug, "debug", false, "Debug mode - internal use")
-	flagSet.BoolVar(&args.init, "init", false, "Initialize a cipher directory.")
-	flagSet.BoolVar(&args.info, "info", false, "Print infomation about a cipher directory.")
-	flagSet.BoolVar(&args.foreground, "f", false, "Run in the foreground.")
-	flagSet.BoolVar(&args.allowOther, "allow_other", false, "Allow other users to access the filesystem. \nOnly works if user_allow_other is set in /etc/fuse.conf.")
-	flagSet.IntVar(&args.parentPid, "parent_pid", 0, "Parent process pid - internal use")
+	flagSet.StringVar(&args.PwdFile, "passfile", "", "Password file path.")
+	flagSet.BoolVar(&args.DebugFuse, "debugfuse", false, "Show fuse Debug messages.")
+	flagSet.BoolVar(&args.Debug, "Debug", false, "Debug mode - internal use")
+	flagSet.BoolVar(&args.Init, "Init", false, "Initialize a cipher directory.")
+	flagSet.BoolVar(&args.Info, "Info", false, "Print infomation about a cipher directory.")
+	flagSet.BoolVar(&args.Foreground, "f", false, "Run in the Foreground.")
+	flagSet.BoolVar(&args.AllowOther, "allow_other", false, "Allow other users to access the filesystem. \nOnly works if user_allow_other is set in /etc/fuse.conf.")
+	flagSet.IntVar(&args.ParentPid, "parent_pid", 0, "Parent process pid - internal use")
 
 	flagSet.Usage = usage
 	flagSet.Parse(os.Args[1:])
@@ -77,25 +77,25 @@ func parseArgs() (args Args) {
 	}
 	// check directories
 	var err error
-	args.cipherDir, err = filepath.Abs(flagSet.Arg(0))
+	args.CipherDir, err = filepath.Abs(flagSet.Arg(0))
 	if err != nil {
 		tlog.Fatal.Printf("Invalid cipherdir: %v", err)
 		os.Exit(exitcode.CipherDir)
 	}
-	if err = checkDir(args.cipherDir); err != nil {
+	if err = checkDir(args.CipherDir); err != nil {
 		tlog.Fatal.Printf("Invalid cipherdir: %v", err)
 		os.Exit(exitcode.CipherDir)
 	}
 
-	if args.init {
+	if args.Init {
 		if flagSet.NArg() != 1 {
 			usage()
 		}
-		if err = checkDirEmpty(args.cipherDir); err != nil {
+		if err = checkDirEmpty(args.CipherDir); err != nil {
 			tlog.Fatal.Printf("Invalid cipherdir: %v", err)
 			os.Exit(exitcode.CipherDir)
 		}
-	} else if args.info {
+	} else if args.Info {
 		if flagSet.NArg() != 1 {
 			usage()
 		}
@@ -103,22 +103,22 @@ func parseArgs() (args Args) {
 		if flagSet.NArg() != 2 {
 			usage()
 		}
-		args.mountPoint, err = filepath.Abs(flagSet.Arg(1))
+		args.MountPoint, err = filepath.Abs(flagSet.Arg(1))
 		if err != nil {
 			tlog.Fatal.Printf("Invalid mountpoint: %v", err)
 			os.Exit(exitcode.MountPoint)
 		}
-		if err = checkDir(args.mountPoint); err != nil {
+		if err = checkDir(args.MountPoint); err != nil {
 			tlog.Fatal.Printf("Invalid mountpoint: %v", err)
 			os.Exit(exitcode.MountPoint)
 		}
-		if args.allowOther && os.Getuid() != 0 {
+		if args.AllowOther && os.Getuid() != 0 {
 			tlog.Fatal.Printf("Allow_other option can only work when run as root user.")
 			os.Exit(exitcode.Usage)
 		}
 	}
 
-	tlog.Debug.Enabled = args.debug
+	tlog.Debug.Enabled = args.Debug
 
 	return args
 }
