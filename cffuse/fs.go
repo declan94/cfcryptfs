@@ -95,7 +95,7 @@ func (fs *CfcryptFS) Open(path string, flags uint32, context *fuse.Context) (fus
 	if st != fuse.OK {
 		return nil, st
 	}
-	var mode uint32 = 1
+	var mode uint32
 	if flags&uint32(os.O_WRONLY) > 0 {
 		mode = 2
 	} else if flags&uint32(os.O_RDWR) > 0 {
@@ -375,6 +375,8 @@ func (fs *CfcryptFS) Link(orig string, newName string, context *fuse.Context) (c
 }
 
 func (fs *CfcryptFS) access(attr *fuse.Attr, mode uint32, context *fuse.Context) bool {
+	tlog.Debug.Printf("access(%d)", mode)
+	tlog.Debug.Printf("syscall.F_OK: %d", syscall.F_OK)
 	if mode == syscall.F_OK {
 		return true
 	}

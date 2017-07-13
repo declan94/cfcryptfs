@@ -125,22 +125,22 @@ func (cc *ContentCrypter) EncryptBlocks(blocks [][]byte, firstBlockNo uint64, fi
 }
 
 // DecryptBlocks decrypt multiple continous cipher blocks
-func (cc *ContentCrypter) DecryptBlocks(cipher []byte, firstBlockNo uint64, fileID []byte) ([]byte, error) {
+func (cc *ContentCrypter) DecryptBlocks(cipher []byte, firstBlockNo uint64, fileID []byte) ([][]byte, error) {
 	cBuf := bytes.NewBuffer(cipher)
 	var err error
-	pBuf := bytes.NewBuffer(cc.PReqPool.Get()[:0])
+	blocks := make([][]byte, (len(cipher)-1)/cc.cipherBS+1)
 	for cBuf.Len() > 0 {
 		cBlock := cBuf.Next(int(cc.cipherBS))
 		var pBlock []byte
 		if pBlock, err = cc.decryptBlock(cBlock, firstBlockNo, fileID); err != nil {
-			tlog.Warn.Printf("Decryption Block Error: %v\n", err)
+			tlog.Warn.Printf("Decryption Block#%d Error: %v\n", firstBlockNo, err)
 			return nil, err
 		}
-		pBuf.Write(pBlock)
+		blocks[firstBlockNo] = pBlock
 		cc.pBlockPool.Put(pBlock)
 		firstBlockNo++
 	}
-	return pBuf.Bytes(), err
+	return blocks, err
 }
 
 // PlainBS return the plain block size

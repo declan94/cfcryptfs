@@ -5,10 +5,13 @@ import (
 	"sync/atomic"
 
 	"github.com/declan94/cfcryptfs/internal/contcrypter"
+	lru "github.com/hashicorp/golang-lru"
 )
 
-// fentry is an entry in the entry table
-type entry struct {
+// nodeEntry is an nodeEntry in the nodeEntry table
+//  there's always a unique nodeEntry for an opened file.
+// 	(even if been opened multiple times and have multiple file handles)
+type nodeEntry struct {
 	// Reference count
 	refCount int
 	// ContentLock guards the file content from concurrent writes. Every writer
@@ -20,7 +23,9 @@ type entry struct {
 	// HeaderLock.Lock().
 	headerLock sync.RWMutex
 	// the file obejct
-	header *contcrypter.FileHeader
+	header     *contcrypter.FileHeader
+	blockCache *lru.Cache
+	fs         *CfcryptFS
 }
 
 type entrytable struct {
@@ -34,18 +39,18 @@ type entrytable struct {
 	// Protects map access
 	sync.Mutex
 	// Table entries
-	entries map[QIno]*entry
+	entries map[QIno]*nodeEntry
 }
 
 // Register creates an open file table entry for "qi" (or incrementes the
 // reference count if the entry already exists) and returns the entry.
-func (enttable *entrytable) register(qi QIno) *entry {
+func (enttable *entrytable) register(qi QIno) *nodeEntry {
 	enttable.Lock()
 	defer enttable.Unlock()
 
 	e := enttable.entries[qi]
 	if e == nil {
-		e = &entry{}
+		e = &nodeEntry{}
 		enttable.entries[qi] = e
 	}
 	e.refCount++
@@ -73,7 +78,7 @@ func (enttable *entrytable) unregister(qi QIno) {
 var enttable entrytable
 
 func init() {
-	enttable.entries = make(map[QIno]*entry)
+	enttable.entries = make(map[QIno]*nodeEntry)
 }
 
 // countingMutex incrementes t.writeLockCount on each Lock() call.
