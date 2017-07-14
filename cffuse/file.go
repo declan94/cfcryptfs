@@ -250,7 +250,8 @@ func (f *file) read(off uint64, length int, cache bool) ([]byte, fuse.Status) {
 		f.fs.contentCrypt.CReqPool.Put(ciphertext)
 		for i, block := range plainBlocks {
 			blocks[left+i] = block
-			if cache {
+			if cache && (i == 0 || left+i == right) {
+				// only cache front and end (most likely to be rehit)
 				f.debugInfo("Cache Block #%d", intraBlocks[left+i].BlockNo)
 				f.ent.cacheBlock(intraBlocks[left+i].BlockNo, block, false)
 			}
@@ -263,9 +264,11 @@ func (f *file) read(off uint64, length int, cache bool) ([]byte, fuse.Status) {
 	for i, block := range blocks {
 		f.debugInfo("concat block #%d", intraBlocks[i].BlockNo)
 		pBuf.Write(block)
-		// if cache then all blocks have been cached, can't put into pool
-		if !cache && i >= left && i <= right && cap(block) > 0 {
-			f.contCrypter.PBlockPool.Put(block)
+		// if block has been cached, we can't put it into pool
+		if i >= left && i <= right && cap(block) > 0 {
+			if !cache || (i > left && i < right) {
+				f.contCrypter.PBlockPool.Put(block)
+			}
 		}
 	}
 	plaintext := pBuf.Bytes()
@@ -370,12 +373,12 @@ func (f *file) write(data []byte, off int64) (uint32, fuse.Status) {
 			// Modify
 			f.debugInfo("Rewrite: len(oldData)=%d len(blockData)=%d offset=%d", len(oldData), len(blockData), b.Skip)
 			blockData = f.contCrypter.RewriteBlock(oldData, blockData, int(b.Skip))
+			f.debugInfo("Cache Block #%d", b.BlockNo)
+			f.ent.cacheBlock(b.BlockNo, blockData, true)
 		}
 		f.debugInfo("Writing %d bytes to block #%d", len(blockData), b.BlockNo)
 		// Write into the to-encrypt list
 		toEncrypt[i] = blockData
-		f.debugInfo("Cache Block #%d", b.BlockNo)
-		f.ent.cacheBlock(b.BlockNo, blockData, true)
 	}
 	// Encrypt all blocks
 	ciphertext, err := f.contCrypter.EncryptBlocks(toEncrypt, intraBlocks[0].BlockNo, f.ent.header.FileID)

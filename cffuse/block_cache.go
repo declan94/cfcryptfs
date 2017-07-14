@@ -7,14 +7,21 @@ import (
 
 // Caches plaintext blocks to speedup sequential read and write(write-on-read)
 
-const cacheTotalBytes = 128 * 1024
+const (
+	maxCacheTotalBytes = 32 * 1024
+	maxCacheBlockCount = 4
+)
 
 func (ent *nodeEntry) getBlockCache() *lru.Cache {
 	if ent.blockCache != nil {
 		return ent.blockCache
 	}
+	cacheCount := maxCacheBlockCount
+	if cacheCount*ent.fs.configs.PlainBS > maxCacheTotalBytes {
+		cacheCount = maxCacheTotalBytes / ent.fs.configs.PlainBS
+	}
 	var err error
-	ent.blockCache, err = lru.NewWithEvict(cacheTotalBytes/ent.fs.configs.PlainBS, func(_ interface{}, value interface{}) {
+	ent.blockCache, err = lru.NewWithEvict(cacheCount, func(_ interface{}, value interface{}) {
 		block := value.([]byte)
 		if cap(block) == ent.fs.configs.PlainBS {
 			// When we cache block with copy, we don't make full PlainBS cap.

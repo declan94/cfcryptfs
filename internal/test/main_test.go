@@ -82,8 +82,8 @@ func TestRandomWrite(t *testing.T) {
 	fd2.ReadAt(text2, 0)
 	if !bytes.Equal(text, text2) {
 		t.Error("Context not matched")
-		t.Errorf("truth: %v", text)
-		t.Errorf("resul: %v", text2)
+		// t.Errorf("truth: %v", text)
+		// t.Errorf("resul: %v", text2)
 	}
 }
 

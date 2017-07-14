@@ -7,5 +7,5 @@
 * Bug fix for reading permission.
 
 #### v0.2
-* Cache plain blocks to speed up sequential per char write/read.
+* Cache recent plain blocks to speed up sequential per char write/read.
 * Bug fix for reading permission problem with write only file.

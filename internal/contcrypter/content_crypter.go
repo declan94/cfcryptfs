@@ -66,19 +66,18 @@ func (cc *ContentCrypter) makeSign(data []byte, blockNo uint64, fileID []byte) [
 func (cc *ContentCrypter) encryptBlock(plain []byte, blockNo uint64, fileID []byte) ([]byte, error) {
 	// Empty block?
 	if len(plain) == 0 {
-		return plain, nil
+		return nil, nil
 	}
 	// Get a cipherBS-sized block of memory, encrypt plaintext and then authenticate with hmac-md5 signature
-	cipherDataBlock := cc.cBlockPool.Get()
-	if err := cc.core.Encrypt(cipherDataBlock, plain); err != nil {
+	cBlock := cc.cBlockPool.Get()
+	if err := cc.core.Encrypt(cBlock, plain); err != nil {
 		return nil, err
 	}
 	cipherDataLen := cc.core.LenAfterEncrypted(len(plain))
 	// Block is authenticated with block numccr and file ID
-	signedBlock := cipherDataBlock[:cipherDataLen+signLen]
-	cipherDataBlock = cipherDataBlock[:cipherDataLen]
-	copy(signedBlock[cipherDataLen:], cc.makeSign(cipherDataBlock, blockNo, fileID))
-	return signedBlock, nil
+	copy(cBlock[cipherDataLen:], cc.makeSign(cBlock[:cipherDataLen], blockNo, fileID))
+	cBlock = cBlock[:cipherDataLen+signLen]
+	return cBlock, nil
 }
 
 func (cc *ContentCrypter) decryptBlock(cipher []byte, blockNo uint64, fileID []byte) ([]byte, error) {
