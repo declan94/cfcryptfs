@@ -9,4 +9,4 @@
 #### v0.2 (developing)
 * Cache plain blocks to speed up sequential per char write/read.
 * Bug fix for reading permission problem with write only file.
-* Bug fix for parallel writing. (working on it)  
+* Bug fix for random writing. (working on it)  

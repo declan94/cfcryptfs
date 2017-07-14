@@ -26,7 +26,7 @@ type ContentCrypter struct {
 	// Ciphertext block pool. Always returns cipherBS-sized byte slices.
 	cBlockPool bPool
 	// Plaintext block pool. Always returns plainBS-sized byte slices.
-	pBlockPool bPool
+	PBlockPool bPool
 	// Ciphertext request data pool. Always returns byte slices of size
 	// fuse.MAX_KERNEL_WRITE + overhead.
 	CReqPool bPool
@@ -45,7 +45,7 @@ func NewContentCrypter(core corecrypter.CoreCrypter, plainBS int) *ContentCrypte
 		cipherBS:     cipherBS,
 		allZeroBlock: make([]byte, cipherBS),
 		cBlockPool:   newBPool(cipherBS),
-		pBlockPool:   newBPool(plainBS),
+		PBlockPool:   newBPool(plainBS),
 		CReqPool:     newBPool(cReqSize),
 		PReqPool:     newBPool(fuse.MAX_KERNEL_WRITE),
 	}
@@ -102,7 +102,7 @@ func (cc *ContentCrypter) decryptBlock(cipher []byte, blockNo uint64, fileID []b
 		return nil, errors.New("Block signature not matched")
 	}
 	// decrypt cipherdata
-	pBlock := cc.pBlockPool.Get()
+	pBlock := cc.PBlockPool.Get()
 	err := cc.core.Decrypt(pBlock, cipherDataBlock)
 	pBlock = pBlock[:cc.core.LenAfterDecrypted(len(cipherDataBlock))]
 	return pBlock, err
@@ -138,7 +138,6 @@ func (cc *ContentCrypter) DecryptBlocks(cipher []byte, firstBlockNo uint64, file
 			return nil, err
 		}
 		blocks[blockNo-firstBlockNo] = pBlock
-		cc.pBlockPool.Put(pBlock)
 		blockNo++
 	}
 	return blocks, err

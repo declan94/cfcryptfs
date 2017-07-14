@@ -17,8 +17,8 @@ func TestParallelWrite(t *testing.T) {
 		defer umountFs()
 	}
 
-	bs := 1024
-	cnt := 10
+	bs := 545
+	cnt := 20
 	text, _ := corecrypter.RandomBytes(bs*cnt + bs/2)
 
 	var wg sync.WaitGroup

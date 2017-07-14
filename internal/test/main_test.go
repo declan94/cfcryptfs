@@ -2,8 +2,8 @@ package test
 
 import (
 	"crypto/rand"
-	"fmt"
 	"io"
+	mrand "math/rand"
 	"os"
 	"path/filepath"
 	"testing"
@@ -19,7 +19,6 @@ func TestSeqWrite(t *testing.T) {
 		defer umountFs()
 	}
 	fd, err := os.OpenFile(getPath("TestWrite"), os.O_WRONLY|os.O_CREATE, 0600)
-	defer fd.Close()
 	if err != nil {
 		t.Errorf("Open file (write only) failed: %v", err)
 	}
@@ -29,13 +28,11 @@ func TestSeqWrite(t *testing.T) {
 		t.Errorf("Open file (read only) failed: %v", err)
 	}
 	text, _ := corecrypter.RandomBytes(10240 + 520)
-	n, err := fd.Write(text)
+	_, err = fd.Write(text)
 	if err != nil {
 		t.Errorf("Write failed: %v", err)
 	}
-	if n < len(text) {
-		t.Errorf("Write len small: %d < %d", n, len(text))
-	}
+	fd.Close()
 	text2 := make([]byte, len(text))
 	fd2.Read(text2)
 	if !bytes.Equal(text, text2) {
@@ -48,23 +45,25 @@ func TestRandomWrite(t *testing.T) {
 		initMountFs()
 		defer umountFs()
 	}
-	bs := 1024
-	cnt := 10
-	text, _ := corecrypter.RandomBytes(bs*cnt + bs/2)
+	bs := 520
+	cnt := 12
+	length := bs * cnt
+	text, _ := corecrypter.RandomBytes(length)
+	index := mrand.Perm(cnt)
 	for i := 0; i < cnt; i++ {
 		fd, err := os.OpenFile(getPath("TestRandomWrite"), os.O_WRONLY|os.O_CREATE, 0600)
 		if err != nil {
 			t.Errorf("Open file (write only) failed: %v", err)
 		}
-		begin := bs * i
-		end := bs * (i + 1)
+		j := index[i]
+		begin := bs * j
+		end := bs * (j + 1)
 		var part []byte
-		if i == cnt-1 {
+		if j == cnt-1 {
 			part = text[begin:]
 		} else {
 			part = text[begin:end]
 		}
-		fmt.Printf("No.%d: len: %d\n", i, len(part))
 		n, err := fd.WriteAt(part, int64(begin))
 		if err != nil {
 			t.Errorf("Write failed: %v", err)

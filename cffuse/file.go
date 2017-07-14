@@ -9,6 +9,8 @@ import (
 	"syscall"
 	"time"
 
+	"fmt"
+
 	"github.com/declan94/cfcryptfs/internal/contcrypter"
 	"github.com/declan94/cfcryptfs/internal/syscallcompat"
 	"github.com/declan94/cfcryptfs/internal/tlog"
@@ -105,11 +107,11 @@ func (f *file) GetAttr(a *fuse.Attr) fuse.Status {
 	f.fdLock.RLock()
 	defer f.fdLock.RUnlock()
 
-	tlog.Debug.Printf("file.GetAttr()")
+	f.debugInfo("file.GetAttr()")
 	st := syscall.Stat_t{}
 	err := syscall.Fstat(int(f.fd.Fd()), &st)
 	if err != nil {
-		tlog.Debug.Printf("get attr failed1: %s", err)
+		f.debugInfo("get attr failed1: %s", err)
 		return fuse.ToStatus(err)
 	}
 	a.FromStat(&st)
@@ -118,25 +120,25 @@ func (f *file) GetAttr(a *fuse.Attr) fuse.Status {
 	defer f.ent.contentLock.RUnlock()
 	a.Size = f.contentEnc.CipherSizeToPlainSize(a.Size)
 	if err = f.loadHeader(); err != nil {
-		tlog.Debug.Printf("get attr failed2: %s", err)
+		f.debugInfo("get attr failed2: %s", err)
 		return fuse.ToStatus(err)
 	}
 	f.ent.headerLock.RLock()
 	defer f.ent.headerLock.RUnlock()
 	a.Mode = f.ent.header.Mode
-	tlog.Debug.Printf("Mode: %d", a.Mode)
+	f.debugInfo("Mode: %d", a.Mode)
 
 	return fuse.OK
 }
 
 func (f *file) Chmod(mode uint32) fuse.Status {
 
-	tlog.Debug.Printf("file.Chmod(%d)", mode)
+	f.debugInfo("file.Chmod(%d)", mode)
 	f.fdLock.RLock()
 	defer f.fdLock.RUnlock()
 
 	if err := f.loadHeader(); err != nil {
-		tlog.Debug.Printf("chmod failed1: %s", err)
+		f.debugInfo("chmod failed1: %s", err)
 		return fuse.ToStatus(err)
 	}
 	f.ent.headerLock.Lock()
@@ -151,7 +153,7 @@ func (f *file) Chmod(mode uint32) fuse.Status {
 	_, err := f.fd.WriteAt(f.ent.header.Pack(), 0)
 
 	if err != nil {
-		tlog.Debug.Printf("Chmod err: %s", err)
+		f.debugInfo("Chmod err: %s", err)
 	}
 
 	return fuse.ToStatus(err)
@@ -184,7 +186,7 @@ func (f *file) Read(buf []byte, off int64) (resultData fuse.ReadResult, code fus
 func (f *file) read(off uint64, length int, cache bool) ([]byte, fuse.Status) {
 	// Make sure we have the file ID.
 	if err := f.loadHeader(); err != nil {
-		tlog.Debug.Printf("Read failed1: %s", err)
+		f.debugInfo("Read failed1: %s", err)
 		return nil, fuse.ToStatus(err)
 	}
 	// Explode plain range
@@ -206,11 +208,11 @@ func (f *file) read(off uint64, length int, cache bool) ([]byte, fuse.Status) {
 			break
 		}
 	}
-	tlog.Debug.Printf("TransformRange(%d, %d) -> Block(%d - %d)", off, length, intraBlocks[0].BlockNo, intraBlocks[len(intraBlocks)-1].BlockNo)
+	f.debugInfo("read TransformRange(%d, %d) -> Block(%d - %d)", off, length, intraBlocks[0].BlockNo, intraBlocks[len(intraBlocks)-1].BlockNo)
 	if left >= len(intraBlocks) {
-		tlog.Debug.Printf("All blocks cached")
+		f.debugInfo("All blocks cached")
 	} else {
-		tlog.Debug.Printf("Not cached blocks (%d - %d)", intraBlocks[left].BlockNo, intraBlocks[right].BlockNo)
+		f.debugInfo("Not cached blocks (%d - %d)", intraBlocks[left].BlockNo, intraBlocks[right].BlockNo)
 	}
 	// If left > right, all blocks have read from cache, no need to read file
 	if left <= right {
@@ -223,28 +225,29 @@ func (f *file) read(off uint64, length int, cache bool) ([]byte, fuse.Status) {
 		n, err := f.fd.ReadAt(ciphertext, int64(offset))
 		f.ent.headerLock.RUnlock()
 		if err != nil && err != io.EOF {
-			tlog.Warn.Printf("read ReadAt error: %s", err.Error())
+			f.warnInfo("read ReadAt error: %s", err.Error())
 			return nil, fuse.ToStatus(err)
 		}
 		// Truncate ciphertext buffer down to actually read bytes
-		ciphertext = ciphertext[0:n]
+		ciphertext = ciphertext[:n]
 		// Decrypt it
 		plainBlocks, err := f.contentEnc.DecryptBlocks(ciphertext, intraBlocks[left].BlockNo, fileID)
 		if n < len(ciphertext) {
+			f.debugInfo("read not full")
 			blocks = blocks[:left+len(plainBlocks)-1]
 			if right < len(intraBlocks)-1 {
-				tlog.Warn.Printf("unexpected extra cached block or read interuptted")
+				f.warnInfo("unexpected extra cached block or read interuptted")
 			}
 		}
 		f.fs.contentCrypt.CReqPool.Put(ciphertext)
 		if err != nil {
-			tlog.Warn.Printf("ino%d: read failed: %v", f.qIno.Ino, err)
+			f.warnInfo("read failed: %v", err)
 			return nil, fuse.EIO
 		}
 		for i, block := range plainBlocks {
 			blocks[left+i] = block
 			if cache {
-				tlog.Debug.Printf("Cache block#%d", intraBlocks[left+i].BlockNo)
+				f.debugInfo("Cache block#%d", intraBlocks[left+i].BlockNo)
 				f.ent.cacheBlock(intraBlocks[left+i].BlockNo, block)
 			}
 		}
@@ -253,8 +256,11 @@ func (f *file) read(off uint64, length int, cache bool) ([]byte, fuse.Status) {
 	// Crop down to the relevant part
 	var out []byte
 	pBuf := bytes.NewBuffer(f.contentEnc.PReqPool.Get()[:0])
-	for _, block := range blocks {
+	for i, block := range blocks {
 		pBuf.Write(block)
+		if i >= left && i <= right && cap(block) > 0 {
+			f.contentEnc.PBlockPool.Put(block)
+		}
 	}
 	plaintext := pBuf.Bytes()
 	lenHave := len(plaintext)
@@ -290,7 +296,7 @@ func (f *file) Write(data []byte, off int64) (uint32, fuse.Status) {
 		// The file descriptor has been closed concurrently, which also means
 		// the wlock has been freed. Exit here so we don't crash trying to access
 		// it.
-		tlog.Warn.Printf("ino%d fh%d: Write on released file", f.qIno.Ino, int(f.fd.Fd()))
+		f.warnInfo("Write on released file")
 		return 0, fuse.EBADF
 	}
 	// var attr fuse.Attr
@@ -303,7 +309,7 @@ func (f *file) Write(data []byte, off int64) (uint32, fuse.Status) {
 	// }
 	f.ent.contentLock.Lock()
 	defer f.ent.contentLock.Unlock()
-	tlog.Debug.Printf("ino%d: FUSE Write: offset=%d length=%d", f.qIno.Ino, off, len(data))
+	f.debugInfo("FUSE Write: offset=%d length=%d", off, len(data))
 	// If the write creates a file hole, we have to zero-pad the last block.
 	// But if the write directly follows an earlier write, it cannot create a
 	// hole, and we can save one Stat() call.
@@ -332,16 +338,16 @@ func (f *file) Write(data []byte, off int64) (uint32, fuse.Status) {
 // Empty writes do nothing and are allowed.
 func (f *file) write(data []byte, off int64) (uint32, fuse.Status) {
 	if err := f.loadHeader(); err != nil {
-		tlog.Debug.Printf("Read failed1: %s", err)
+		f.debugInfo("Read failed1: %s", err)
 		return 0, fuse.ToStatus(err)
 	}
 	f.ent.headerLock.RLock()
 	defer f.ent.headerLock.RUnlock()
 	// Handle payload data
 	dataBuf := bytes.NewBuffer(data)
-	blocks := f.contentEnc.ExplodePlainRange(uint64(off), len(data))
-	toEncrypt := make([][]byte, len(blocks))
-	for i, b := range blocks {
+	intraBlocks := f.contentEnc.ExplodePlainRange(uint64(off), len(data))
+	toEncrypt := make([][]byte, len(intraBlocks))
+	for i, b := range intraBlocks {
 		blockData := dataBuf.Next(int(b.Length))
 		// Incomplete block -> Read-Modify-Write
 		if b.Partial {
@@ -351,40 +357,43 @@ func (f *file) write(data []byte, off int64) (uint32, fuse.Status) {
 				var status fuse.Status
 				oldData, status = f.read(f.contentEnc.BlockNoToPlainOff(b.BlockNo), f.contentEnc.PlainBS(), false)
 				if status != fuse.OK {
-					tlog.Warn.Printf("ino%d fh%d: RMW read failed: %s", f.qIno.Ino, int(f.fd.Fd()), status.String())
+					f.warnInfo("RMW read failed: %s", status.String())
 					return 0, status
 				}
 			}
 			// Modify
+			f.debugInfo("Rewrite: len(oldData)=%d len(blockData)=%d offset=%d", len(oldData), len(blockData), b.Skip)
 			blockData = f.contentEnc.RewriteBlock(oldData, blockData, int(b.Skip))
-			tlog.Debug.Printf("len(oldData)=%d len(blockData)=%d", len(oldData), len(blockData))
 		}
-		tlog.Debug.Printf("ino%d: Writing %d bytes to block #%d",
-			f.qIno.Ino, uint64(len(blockData))-f.contentEnc.BlockOverhead(), b.BlockNo)
+		f.debugInfo("Writing %d bytes to block #%d", len(blockData), b.BlockNo)
 		// Write into the to-encrypt list
 		toEncrypt[i] = blockData
 		f.ent.cacheBlock(b.BlockNo, blockData)
 	}
 	// Encrypt all blocks
-	ciphertext, err := f.contentEnc.EncryptBlocks(toEncrypt, blocks[0].BlockNo, f.ent.header.FileID)
+	ciphertext, err := f.contentEnc.EncryptBlocks(toEncrypt, intraBlocks[0].BlockNo, f.ent.header.FileID)
 	if err != nil {
-		tlog.Warn.Printf("write: Write failed: %v", err)
+		f.warnInfo("write: Write failed: %v", err)
 		return 0, fuse.ToStatus(err)
 	}
 	// Preallocate so we cannot run out of space in the middle of the write.
 	// This prevents partially written (=corrupt) blocks.
-	cOff := int64(f.contentEnc.BlockNoToCipherOff(blocks[0].BlockNo))
+	cOff := int64(f.contentEnc.BlockNoToCipherOff(intraBlocks[0].BlockNo))
+	f.debugInfo("Write to cipher offset: %d", cOff)
 	err = syscallcompat.EnospcPrealloc(int(f.fd.Fd()), cOff, int64(len(ciphertext)))
 	if err != nil {
-		tlog.Warn.Printf("ino%d fh%d: write: prealloc failed: %s", f.qIno.Ino, int(f.fd.Fd()), err.Error())
+		f.warnInfo("write: prealloc failed: %s", err.Error())
 		return 0, fuse.ToStatus(err)
 	}
 	// Write
-	_, err = f.fd.WriteAt(ciphertext, cOff)
+	n, err := f.fd.WriteAt(ciphertext, cOff)
+	if n < len(ciphertext) {
+		f.warnInfo("write incomplete: %d < %d", n, len(ciphertext))
+	}
 	// Return memory to CReqPool
 	f.fs.contentCrypt.CReqPool.Put(ciphertext)
 	if err != nil {
-		tlog.Warn.Printf("write: Write failed: %v", err)
+		f.warnInfo("write: Write failed: %v", err)
 		return 0, fuse.ToStatus(err)
 	}
 	return uint32(len(data)), fuse.OK
@@ -448,10 +457,11 @@ func (f *file) loadHeader() error {
 // Will a write to plaintext offset "targetOff" create a file hole in the
 // ciphertext? If yes, zero-pad the last ciphertext block.
 func (f *file) writePadHole(targetOff int64) fuse.Status {
+	f.debugInfo("writePadHole: %d", targetOff)
 	// Get the current file size.
 	fi, err := f.fd.Stat()
 	if err != nil {
-		tlog.Warn.Printf("checkAndPadHole: Fstat failed: %v", err)
+		f.warnInfo("checkAndPadHole: Fstat failed: %v", err)
 		return fuse.ToStatus(err)
 	}
 	plainSize := f.contentEnc.CipherSizeToPlainSize(uint64(fi.Size()))
@@ -470,7 +480,7 @@ func (f *file) writePadHole(targetOff int64) fuse.Status {
 	// will contain a file hole in the ciphertext.
 	status := f.zeroPad(plainSize)
 	if status != fuse.OK {
-		tlog.Warn.Printf("zeroPad returned error %v", status)
+		f.warnInfo("zeroPad returned error %v", status)
 		return status
 	}
 	return fuse.OK
@@ -479,6 +489,7 @@ func (f *file) writePadHole(targetOff int64) fuse.Status {
 // Zero-pad the file of size plainSize to the next block boundary. This is a no-op
 // if the file is already block-aligned.
 func (f *file) zeroPad(plainSize uint64) fuse.Status {
+	f.debugInfo("zeroPad: %d", plainSize)
 	lastBlockLen := plainSize % uint64(f.contentEnc.PlainBS())
 	if lastBlockLen == 0 {
 		// Already block-aligned
@@ -486,7 +497,15 @@ func (f *file) zeroPad(plainSize uint64) fuse.Status {
 	}
 	missing := uint64(f.contentEnc.PlainBS()) - lastBlockLen
 	pad := make([]byte, missing)
-	tlog.Debug.Printf("zeroPad: Writing %d bytes\n", missing)
+	f.debugInfo("zeroPad: Writing %d bytes\n", missing)
 	_, status := f.write(pad, int64(plainSize))
 	return status
+}
+
+func (f *file) debugInfo(format string, args ...interface{}) {
+	tlog.Debug.Printf(fmt.Sprintf("[ino%d-fd%02d]: %s", f.qIno.Ino, int(f.fd.Fd()), format), args...)
+}
+
+func (f *file) warnInfo(format string, args ...interface{}) {
+	tlog.Warn.Printf(fmt.Sprintf("[ino%d-fd%02d]: %s", f.qIno.Ino, int(f.fd.Fd()), format), args...)
 }
