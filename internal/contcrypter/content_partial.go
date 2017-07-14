@@ -126,29 +126,20 @@ func (cc *ContentCrypter) TransformPlainRange(offset uint64, length int) (plainS
 // RewriteBlock - Merge newData into oldData at offset
 // New block may be bigger than both newData and oldData
 func (cc *ContentCrypter) RewriteBlock(oldData []byte, newData []byte, offset int) []byte {
-	// Fastpath for small-file creation
-	// if len(oldData) == 0 && offset == 0 {
-	// 	return newData
-	// }
-	// We now cannot go through this fastpath
-	// cause we cache the block data returned without copy
-	// we must do copy here
+	oldLen := len(oldData)
+	if oldData == nil {
+		// Make block of maximum size
+		oldData = cc.PBlockPool.Get()
+	}
+	oldData = oldData[:cc.plainBS]
+	copy(oldData[offset:], newData)
 
-	// Make block of maximum size
-	out := cc.PBlockPool.Get()
-
-	// Copy old and new data into it
-	copy(out, oldData)
-	l := len(newData)
-	copy(out[offset:offset+l], newData)
-
-	// Crop to length
-	outLen := len(oldData)
 	newLen := offset + len(newData)
+	outLen := oldLen
 	if outLen < newLen {
 		outLen = newLen
 	}
-	return out[0:outLen]
+	return oldData[0:outLen]
 }
 
 // BlockOverhead returns the per-block overhead.
