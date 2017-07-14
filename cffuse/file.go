@@ -262,7 +262,7 @@ func (f *file) read(off uint64, length int, cache bool) ([]byte, fuse.Status) {
 	}
 	// Crop down to the relevant part
 	var out []byte
-	pBuf := bytes.NewBuffer(f.contCrypter.PReqPool.Get()[:0])
+	pBuf := bytes.NewBuffer(make([]byte, len(blocks)*f.contCrypter.PlainBS())[:0])
 	for i, block := range blocks {
 		f.debugInfo("concat block #%d", intraBlocks[i].BlockNo)
 		pBuf.Write(block)
@@ -371,12 +371,17 @@ func (f *file) write(data []byte, off int64) (uint32, fuse.Status) {
 					f.warnInfo("RMW read failed: %s", status.String())
 					return 0, status
 				}
+				f.debugInfo("Merge Block: len(oldData)=%d len(newData)=%d offset=%d", len(oldData), len(blockData), b.Skip)
+				blockData = f.contCrypter.MergeBlock(oldData, blockData, int(b.Skip))
+				f.ent.cacheBlock(b.BlockNo, blockData, false)
+			} else {
+				f.debugInfo("Block cache hitted #%d", b.BlockNo)
+				f.debugInfo("Rewrite Block: len(oldData)=%d len(newData)=%d offset=%d", len(oldData), len(blockData), b.Skip)
+				blockData = f.contCrypter.RewriteBlock(oldData, blockData, int(b.Skip))
+				f.ent.cacheBlock(b.BlockNo, blockData, false)
 			}
-			// Modify
-			f.debugInfo("Rewrite: len(oldData)=%d len(blockData)=%d offset=%d", len(oldData), len(blockData), b.Skip)
-			blockData = f.contCrypter.RewriteBlock(oldData, blockData, int(b.Skip))
+
 			f.debugInfo("Cache Block #%d", b.BlockNo)
-			f.ent.cacheBlock(b.BlockNo, blockData, false)
 		}
 		f.debugInfo("Writing %d bytes to block #%d", len(blockData), b.BlockNo)
 		// Write into the to-encrypt list

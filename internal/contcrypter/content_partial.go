@@ -123,8 +123,22 @@ func (cc *ContentCrypter) TransformPlainRange(offset uint64, length int) (plainS
 	return
 }
 
+// MergeBlock - Merge newData into oldData at offset
+func (cc *ContentCrypter) MergeBlock(oldData []byte, newData []byte, offset int) []byte {
+	merge := cc.PBlockPool.Get()
+	copy(merge, oldData)
+	copy(merge[offset:], newData)
+
+	newLen := offset + len(newData)
+	outLen := len(oldData)
+	if outLen < newLen {
+		outLen = newLen
+	}
+	return merge[:outLen]
+}
+
 // RewriteBlock - Merge newData into oldData at offset
-// New block may be bigger than both newData and oldData
+// 	Rewrite in place.
 func (cc *ContentCrypter) RewriteBlock(oldData []byte, newData []byte, offset int) []byte {
 	oldLen := len(oldData)
 	if oldData == nil {
@@ -139,7 +153,7 @@ func (cc *ContentCrypter) RewriteBlock(oldData []byte, newData []byte, offset in
 	if outLen < newLen {
 		outLen = newLen
 	}
-	return oldData[0:outLen]
+	return oldData[:outLen]
 }
 
 // BlockOverhead returns the per-block overhead.

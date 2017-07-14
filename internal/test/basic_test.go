@@ -45,8 +45,8 @@ func TestRandomWrite(t *testing.T) {
 		initMountFs()
 		defer umountFs()
 	}
-	bs := 520
-	cnt := 8
+	bs := mrand.Int()%defaultConfig().PlainBS + 1
+	cnt := 12
 	length := bs * cnt
 	text, _ := corecrypter.RandomBytes(length)
 	index := mrand.Perm(cnt)
@@ -64,7 +64,7 @@ func TestRandomWrite(t *testing.T) {
 		} else {
 			part = text[begin:end]
 		}
-		n, err := fd.WriteAt(part, int64(begin))
+		_, err := fd.WriteAt(part, int64(begin))
 		if err != nil {
 			t.Errorf("Write failed: %v", err)
 		}
@@ -100,13 +100,13 @@ func TestRewrite(t *testing.T) {
 		t.Errorf("Open file (read only) failed: %v", err)
 	}
 	text, _ := corecrypter.RandomBytes(10240 + 520)
-	n, err := fd.Write(text)
+	_, err = fd.Write(text)
 	if err != nil {
 		t.Errorf("Write failed: %v", err)
 	}
 	part := text[500:600]
 	io.ReadFull(rand.Reader, part)
-	n, err = fd.WriteAt(part, 500)
+	_, err = fd.WriteAt(part, 500)
 	if err != nil {
 		t.Errorf("Write part failed: %v", err)
 	}
@@ -181,7 +181,7 @@ func TestParallelWrite(t *testing.T) {
 			} else {
 				part = text[begin:end]
 			}
-			n, err := fd.WriteAt(part, int64(begin))
+			_, err = fd.WriteAt(part, int64(begin))
 			if err != nil {
 				t.Errorf("Write failed: %v", err)
 			}
@@ -207,12 +207,13 @@ func TestMonkeys(t *testing.T) {
 		initMountFs()
 		defer umountFs()
 	}
-	cnt := 20
-	maxlen := 1024 * 512
-	maxoffset := 1024 * 1024 * 1024
+	bs := defaultConfig().PlainBS
+	paracnt := 10
+	maxlen := bs * 4
+	maxoffset := bs * 1024
 
 	var wg sync.WaitGroup
-	for i := 0; i < cnt; i++ {
+	for i := 0; i < paracnt; i++ {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
@@ -226,16 +227,18 @@ func TestMonkeys(t *testing.T) {
 				t.Errorf("Open compare file (write only) failed: %v", err)
 			}
 			defer fdc.Close()
-			len := mrand.Int() % maxlen
-			offset := mrand.Int() % maxoffset
-			cont, _ := corecrypter.RandomBytes(len)
-			_, err := fd.WriteAt(cont, int64(offset))
-			if err != nil {
-				t.Errorf("Write failed: %v", err)
-			}
-			_, err = fdc.WriteAt(cont, int64(offset))
-			if err != nil {
-				t.Errorf("Write compare failed: %v", err)
+			for j := 0; j <= i; j++ {
+				len := mrand.Int() % maxlen
+				offset := mrand.Int() % maxoffset
+				cont, _ := corecrypter.RandomBytes(len)
+				_, err = fd.WriteAt(cont, int64(offset))
+				if err != nil {
+					t.Errorf("Write failed: %v", err)
+				}
+				_, err = fdc.WriteAt(cont, int64(offset))
+				if err != nil {
+					t.Errorf("Write compare failed: %v", err)
+				}
 			}
 		}(i)
 	}

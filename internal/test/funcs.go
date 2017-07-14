@@ -20,7 +20,7 @@ func defaultConfig() *cli.CipherConfig {
 		Version:      0,
 		CryptType:    corecrypter.DES,
 		CryptTypeStr: "DES",
-		PlainBS:      2048,
+		PlainBS:      128,
 		PlainPath:    false,
 	}
 }

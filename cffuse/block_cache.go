@@ -21,14 +21,7 @@ func (ent *nodeEntry) getBlockCache() *lru.Cache {
 		cacheCount = maxCacheTotalBytes / ent.fs.configs.PlainBS
 	}
 	var err error
-	ent.blockCache, err = lru.NewWithEvict(cacheCount, func(_ interface{}, value interface{}) {
-		block := value.([]byte)
-		if cap(block) == ent.fs.configs.PlainBS {
-			// When we cache block with copy, we don't make full PlainBS cap.
-			// So here we need to check the cap.
-			ent.fs.contentCrypt.PBlockPool.Put(block)
-		}
-	})
+	ent.blockCache, err = lru.New(cacheCount)
 	if err != nil {
 		tlog.Warn.Printf("New block cache failed: %v", err)
 		return nil
