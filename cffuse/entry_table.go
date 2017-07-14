@@ -66,6 +66,8 @@ func (enttable *entrytable) unregister(qi QIno) {
 	e := enttable.entries[qi]
 	e.refCount--
 	if e.refCount == 0 {
+		// call purgeCacheBlocks to put all cached blocks into PBlockPool
+		e.purgeCachedBlocks()
 		delete(enttable.entries, qi)
 	}
 }

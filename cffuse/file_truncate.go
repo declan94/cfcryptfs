@@ -40,8 +40,8 @@ func (f *file) Truncate(newSize uint64) fuse.Status {
 		return fuse.ToStatus(err)
 	}
 
-	oldB := float32(oldSize) / float32(f.contentEnc.PlainBS())
-	newB := float32(newSize) / float32(f.contentEnc.PlainBS())
+	oldB := float32(oldSize) / float32(f.contCrypter.PlainBS())
+	newB := float32(newSize) / float32(f.contCrypter.PlainBS())
 	tlog.Debug.Printf("ino%d: FUSE Truncate from %.2f to %.2f blocks (%d to %d bytes)", f.qIno.Ino, oldB, newB, oldSize, newSize)
 
 	// File size stays the same - nothing to do
@@ -55,9 +55,9 @@ func (f *file) Truncate(newSize uint64) fuse.Status {
 
 	// File shrinks
 	f.ent.purgeCachedBlocks()
-	blockNo := f.contentEnc.PlainOffToBlockNo(newSize)
-	cipherOff := f.contentEnc.BlockNoToCipherOff(blockNo)
-	plainOff := f.contentEnc.BlockNoToPlainOff(blockNo)
+	blockNo := f.contCrypter.PlainOffToBlockNo(newSize)
+	cipherOff := f.contCrypter.BlockNoToCipherOff(blockNo)
+	plainOff := f.contCrypter.BlockNoToPlainOff(blockNo)
 	lastBlockLen := newSize - plainOff
 	var data []byte
 	if lastBlockLen > 0 {
@@ -90,7 +90,7 @@ func (f *file) statPlainSize() (uint64, error) {
 		return 0, err
 	}
 	cipherSz := uint64(fi.Size())
-	plainSz := uint64(f.contentEnc.CipherSizeToPlainSize(cipherSz))
+	plainSz := uint64(f.contCrypter.CipherSizeToPlainSize(cipherSz))
 	return plainSz, nil
 }
 
@@ -103,10 +103,10 @@ func (f *file) truncateGrowFile(oldPlainSz uint64, newPlainSz uint64) fuse.Statu
 	}
 	var n1 uint64
 	if oldPlainSz > 0 {
-		n1 = f.contentEnc.PlainOffToBlockNo(oldPlainSz - 1)
+		n1 = f.contCrypter.PlainOffToBlockNo(oldPlainSz - 1)
 	}
 	newEOFOffset := newPlainSz - 1
-	n2 := f.contentEnc.PlainOffToBlockNo(newEOFOffset)
+	n2 := f.contCrypter.PlainOffToBlockNo(newEOFOffset)
 	// The file is grown within one block, no need to pad anything.
 	// Write a single zero to the last byte and let write figure out the RMW.
 	if n1 == n2 {
@@ -121,8 +121,8 @@ func (f *file) truncateGrowFile(oldPlainSz uint64, newPlainSz uint64) fuse.Statu
 	f.zeroPad(oldPlainSz)
 	// The new size is block-aligned. In this case we can just use syscall.Truncate
 	// and avoid the call to write.
-	if newPlainSz%uint64(f.contentEnc.PlainBS()) == 0 {
-		cSz := int64(f.contentEnc.PlainSizeToCipherSize(newPlainSz))
+	if newPlainSz%uint64(f.contCrypter.PlainBS()) == 0 {
+		cSz := int64(f.contCrypter.PlainSizeToCipherSize(newPlainSz))
 		err := syscall.Ftruncate(int(f.fd.Fd()), cSz)
 		if err != nil {
 			tlog.Warn.Printf("Truncate: grow Ftruncate returned error: %v", err)

@@ -43,7 +43,7 @@ type file struct {
 	// Release(), which closes the fd and sets "released" to true.
 	fdLock sync.RWMutex
 	// Content encryption helper
-	contentEnc *contcrypter.ContentCrypter
+	contCrypter *contcrypter.ContentCrypter
 	// Device and inode number uniquely identify the backing file
 	qIno QIno
 	// baking file entry
@@ -91,7 +91,7 @@ func newFile(fd *os.File, fs *CfcryptFS, ctx *fuse.Context) (*file, fuse.Status)
 	ent.fs = fs
 	f := &file{
 		fd:           fd,
-		contentEnc:   fs.contentCrypt,
+		contCrypter:  fs.contentCrypt,
 		qIno:         qi,
 		ent:          ent,
 		loopbackFile: nodefs.NewLoopbackFile(fd),
@@ -118,7 +118,7 @@ func (f *file) GetAttr(a *fuse.Attr) fuse.Status {
 	// rlock content to make sure not writing now
 	f.ent.contentLock.RLock()
 	defer f.ent.contentLock.RUnlock()
-	a.Size = f.contentEnc.CipherSizeToPlainSize(a.Size)
+	a.Size = f.contCrypter.CipherSizeToPlainSize(a.Size)
 	if err = f.loadHeader(); err != nil {
 		f.debugInfo("get attr failed2: %s", err)
 		return fuse.ToStatus(err)
@@ -190,7 +190,7 @@ func (f *file) read(off uint64, length int, cache bool) ([]byte, fuse.Status) {
 		return nil, fuse.ToStatus(err)
 	}
 	// Explode plain range
-	intraBlocks := f.contentEnc.ExplodePlainRange(off, length)
+	intraBlocks := f.contCrypter.ExplodePlainRange(off, length)
 	blocks := make([][]byte, len(intraBlocks))
 	// Skip cached blocks in front or at end.
 	// Only to read those in the middle
@@ -201,9 +201,11 @@ func (f *file) read(off uint64, length int, cache bool) ([]byte, fuse.Status) {
 		if cached == nil {
 			break
 		}
+		f.debugInfo("get cached block #%d", intraBlocks[left].BlockNo)
 	}
 	for right = len(intraBlocks) - 1; right > left; right-- {
 		cached := f.ent.getCachedBlock(intraBlocks[right].BlockNo)
+		blocks[right] = cached
 		if cached == nil {
 			break
 		}
@@ -223,6 +225,7 @@ func (f *file) read(off uint64, length int, cache bool) ([]byte, fuse.Status) {
 		ciphertext := f.fs.contentCrypt.CReqPool.Get()
 		ciphertext = ciphertext[:int(cipherlen)]
 		n, err := f.fd.ReadAt(ciphertext, int64(offset))
+		f.debugInfo("read offset: %d, return length: %d", offset, n)
 		f.ent.headerLock.RUnlock()
 		if err != nil && err != io.EOF {
 			f.warnInfo("read ReadAt error: %s", err.Error())
@@ -231,35 +234,38 @@ func (f *file) read(off uint64, length int, cache bool) ([]byte, fuse.Status) {
 		// Truncate ciphertext buffer down to actually read bytes
 		ciphertext = ciphertext[:n]
 		// Decrypt it
-		plainBlocks, err := f.contentEnc.DecryptBlocks(ciphertext, intraBlocks[left].BlockNo, fileID)
-		if n < len(ciphertext) {
-			f.debugInfo("read not full")
-			blocks = blocks[:left+len(plainBlocks)-1]
-			if right < len(intraBlocks)-1 {
-				f.warnInfo("unexpected extra cached block or read interuptted")
-			}
-		}
-		f.fs.contentCrypt.CReqPool.Put(ciphertext)
+		plainBlocks, err := f.contCrypter.DecryptBlocks(ciphertext, intraBlocks[left].BlockNo, fileID)
 		if err != nil {
-			f.warnInfo("read failed: %v", err)
+			f.warnInfo("Decrypt blocks failed: %v", err)
 			return nil, fuse.EIO
 		}
+		if n < cipherlen {
+			f.debugInfo("EOF")
+			if left+len(plainBlocks) == 0 {
+				f.debugInfo("EOF no content return")
+				return nil, fuse.OK
+			}
+			blocks = blocks[:left+len(plainBlocks)]
+		}
+		f.fs.contentCrypt.CReqPool.Put(ciphertext)
 		for i, block := range plainBlocks {
 			blocks[left+i] = block
 			if cache {
-				f.debugInfo("Cache block#%d", intraBlocks[left+i].BlockNo)
-				f.ent.cacheBlock(intraBlocks[left+i].BlockNo, block)
+				f.debugInfo("Cache Block #%d", intraBlocks[left+i].BlockNo)
+				f.ent.cacheBlock(intraBlocks[left+i].BlockNo, block, false)
 			}
 		}
 	}
 
 	// Crop down to the relevant part
 	var out []byte
-	pBuf := bytes.NewBuffer(f.contentEnc.PReqPool.Get()[:0])
+	pBuf := bytes.NewBuffer(f.contCrypter.PReqPool.Get()[:0])
 	for i, block := range blocks {
+		f.debugInfo("concat block #%d", intraBlocks[i].BlockNo)
 		pBuf.Write(block)
-		if i >= left && i <= right && cap(block) > 0 {
-			f.contentEnc.PBlockPool.Put(block)
+		// if cache then all blocks have been cached, can't put into pool
+		if !cache && i >= left && i <= right && cap(block) > 0 {
+			f.contCrypter.PBlockPool.Put(block)
 		}
 	}
 	plaintext := pBuf.Bytes()
@@ -345,7 +351,7 @@ func (f *file) write(data []byte, off int64) (uint32, fuse.Status) {
 	defer f.ent.headerLock.RUnlock()
 	// Handle payload data
 	dataBuf := bytes.NewBuffer(data)
-	intraBlocks := f.contentEnc.ExplodePlainRange(uint64(off), len(data))
+	intraBlocks := f.contCrypter.ExplodePlainRange(uint64(off), len(data))
 	toEncrypt := make([][]byte, len(intraBlocks))
 	for i, b := range intraBlocks {
 		blockData := dataBuf.Next(int(b.Length))
@@ -355,7 +361,7 @@ func (f *file) write(data []byte, off int64) (uint32, fuse.Status) {
 			if oldData == nil {
 				// Read
 				var status fuse.Status
-				oldData, status = f.read(f.contentEnc.BlockNoToPlainOff(b.BlockNo), f.contentEnc.PlainBS(), false)
+				oldData, status = f.read(f.contCrypter.BlockNoToPlainOff(b.BlockNo), f.contCrypter.PlainBS(), false)
 				if status != fuse.OK {
 					f.warnInfo("RMW read failed: %s", status.String())
 					return 0, status
@@ -363,22 +369,23 @@ func (f *file) write(data []byte, off int64) (uint32, fuse.Status) {
 			}
 			// Modify
 			f.debugInfo("Rewrite: len(oldData)=%d len(blockData)=%d offset=%d", len(oldData), len(blockData), b.Skip)
-			blockData = f.contentEnc.RewriteBlock(oldData, blockData, int(b.Skip))
+			blockData = f.contCrypter.RewriteBlock(oldData, blockData, int(b.Skip))
 		}
 		f.debugInfo("Writing %d bytes to block #%d", len(blockData), b.BlockNo)
 		// Write into the to-encrypt list
 		toEncrypt[i] = blockData
-		f.ent.cacheBlock(b.BlockNo, blockData)
+		f.debugInfo("Cache Block #%d", b.BlockNo)
+		f.ent.cacheBlock(b.BlockNo, blockData, true)
 	}
 	// Encrypt all blocks
-	ciphertext, err := f.contentEnc.EncryptBlocks(toEncrypt, intraBlocks[0].BlockNo, f.ent.header.FileID)
+	ciphertext, err := f.contCrypter.EncryptBlocks(toEncrypt, intraBlocks[0].BlockNo, f.ent.header.FileID)
 	if err != nil {
 		f.warnInfo("write: Write failed: %v", err)
 		return 0, fuse.ToStatus(err)
 	}
 	// Preallocate so we cannot run out of space in the middle of the write.
 	// This prevents partially written (=corrupt) blocks.
-	cOff := int64(f.contentEnc.BlockNoToCipherOff(intraBlocks[0].BlockNo))
+	cOff := int64(f.contCrypter.BlockNoToCipherOff(intraBlocks[0].BlockNo))
 	f.debugInfo("Write to cipher offset: %d", cOff)
 	err = syscallcompat.EnospcPrealloc(int(f.fd.Fd()), cOff, int64(len(ciphertext)))
 	if err != nil {
@@ -464,12 +471,12 @@ func (f *file) writePadHole(targetOff int64) fuse.Status {
 		f.warnInfo("checkAndPadHole: Fstat failed: %v", err)
 		return fuse.ToStatus(err)
 	}
-	plainSize := f.contentEnc.CipherSizeToPlainSize(uint64(fi.Size()))
+	plainSize := f.contCrypter.CipherSizeToPlainSize(uint64(fi.Size()))
 	// Appending a single byte to the file (equivalent to writing to
 	// offset=plainSize) would write to "nextBlock".
-	nextBlock := f.contentEnc.PlainOffToBlockNo(plainSize)
+	nextBlock := f.contCrypter.PlainOffToBlockNo(plainSize)
 	// targetBlock is the block the user wants to write to.
-	targetBlock := f.contentEnc.PlainOffToBlockNo(uint64(targetOff))
+	targetBlock := f.contCrypter.PlainOffToBlockNo(uint64(targetOff))
 	// The write goes into an existing block or (if the last block was full)
 	// starts a new one directly after the last block. Nothing to do.
 	if targetBlock <= nextBlock {
@@ -490,12 +497,12 @@ func (f *file) writePadHole(targetOff int64) fuse.Status {
 // if the file is already block-aligned.
 func (f *file) zeroPad(plainSize uint64) fuse.Status {
 	f.debugInfo("zeroPad: %d", plainSize)
-	lastBlockLen := plainSize % uint64(f.contentEnc.PlainBS())
+	lastBlockLen := plainSize % uint64(f.contCrypter.PlainBS())
 	if lastBlockLen == 0 {
 		// Already block-aligned
 		return fuse.OK
 	}
-	missing := uint64(f.contentEnc.PlainBS()) - lastBlockLen
+	missing := uint64(f.contCrypter.PlainBS()) - lastBlockLen
 	pad := make([]byte, missing)
 	f.debugInfo("zeroPad: Writing %d bytes\n", missing)
 	_, status := f.write(pad, int64(plainSize))

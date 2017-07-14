@@ -14,7 +14,14 @@ func (ent *nodeEntry) getBlockCache() *lru.Cache {
 		return ent.blockCache
 	}
 	var err error
-	ent.blockCache, err = lru.New(cacheTotalBytes / ent.fs.configs.PlainBS)
+	ent.blockCache, err = lru.NewWithEvict(cacheTotalBytes/ent.fs.configs.PlainBS, func(_ interface{}, value interface{}) {
+		block := value.([]byte)
+		if cap(block) == ent.fs.configs.PlainBS {
+			// When we cache block with copy, we don't make full PlainBS cap.
+			// So here we need to check the cap.
+			ent.fs.contentCrypt.PBlockPool.Put(block)
+		}
+	})
 	if err != nil {
 		tlog.Warn.Printf("New block cache failed: %v", err)
 		return nil
@@ -22,10 +29,21 @@ func (ent *nodeEntry) getBlockCache() *lru.Cache {
 	return ent.blockCache
 }
 
-func (ent *nodeEntry) cacheBlock(blockNo uint64, content []byte) {
+// needCopy: sometimes the cache slice point to memory we only have tempory access.
+// 	for example the byte slice data param in the fuse Write call
+// 	we need to do copy, otherwise the content data of the slice may change.
+func (ent *nodeEntry) cacheBlock(blockNo uint64, content []byte, needCopy bool) {
 	cache := ent.getBlockCache()
 	if cache != nil {
-		cache.Add(blockNo, content)
+		var final []byte
+		if needCopy {
+			final := ent.fs.contentCrypt.PBlockPool.Get()
+			copy(final, content)
+			final = final[:len(content)]
+		} else {
+			final = content
+		}
+		cache.Add(blockNo, final)
 	}
 }
 

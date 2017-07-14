@@ -72,7 +72,7 @@ func TestRandomWrite(t *testing.T) {
 			t.Errorf("Write len small: %d < %d", n, len(text))
 		}
 	}
-	fd.Close()
+	defer fd.Close()
 	fd2, err := os.OpenFile(getPath("TestRandomWrite"), os.O_RDONLY, 0600)
 	if err != nil {
 		t.Fatalf("Open file (read only) failed: %v", err)

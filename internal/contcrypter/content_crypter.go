@@ -126,6 +126,9 @@ func (cc *ContentCrypter) EncryptBlocks(blocks [][]byte, firstBlockNo uint64, fi
 
 // DecryptBlocks decrypt multiple continous cipher blocks
 func (cc *ContentCrypter) DecryptBlocks(cipher []byte, firstBlockNo uint64, fileID []byte) ([][]byte, error) {
+	if len(cipher) == 0 {
+		return nil, nil
+	}
 	cBuf := bytes.NewBuffer(cipher)
 	var err error
 	blocks := make([][]byte, (len(cipher)-1)/cc.cipherBS+1)
