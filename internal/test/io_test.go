@@ -68,9 +68,6 @@ func TestRandomWrite(t *testing.T) {
 		if err != nil {
 			t.Errorf("Write failed: %v", err)
 		}
-		if n < len(part) {
-			t.Errorf("Write len small: %d < %d", n, len(text))
-		}
 	}
 	defer fd.Close()
 	fd2, err := os.OpenFile(getPath("TestRandomWrite"), os.O_RDONLY, 0600)
@@ -107,17 +104,11 @@ func TestRewrite(t *testing.T) {
 	if err != nil {
 		t.Errorf("Write failed: %v", err)
 	}
-	if n < len(text) {
-		t.Errorf("Write len small: %d < %d", n, len(text))
-	}
 	part := text[500:600]
 	io.ReadFull(rand.Reader, part)
 	n, err = fd.WriteAt(part, 500)
 	if err != nil {
 		t.Errorf("Write part failed: %v", err)
-	}
-	if n < len(part) {
-		t.Errorf("Write part len small: %d < %d", n, len(text))
 	}
 	text2 := make([]byte, len(text))
 	fd2.Read(text2)
@@ -194,9 +185,6 @@ func TestParallelWrite(t *testing.T) {
 			if err != nil {
 				t.Errorf("Write failed: %v", err)
 			}
-			if n < len(part) {
-				t.Errorf("Write len small: %d < %d", n, len(text))
-			}
 		}(i)
 	}
 	wg.Wait()
@@ -211,5 +199,48 @@ func TestParallelWrite(t *testing.T) {
 		t.Error("Context not matched")
 		// t.Errorf("truth: %v", text)
 		// t.Errorf("resul: %v", text2)
+	}
+}
+
+func TestMonkeys(t *testing.T) {
+	if !fsMounted {
+		initMountFs()
+		defer umountFs()
+	}
+	cnt := 20
+	maxlen := 1024 * 512
+	maxoffset := 1024 * 1024 * 1024
+
+	var wg sync.WaitGroup
+	for i := 0; i < cnt; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			fd, err := os.OpenFile(getPath("TestMonkeys"), os.O_WRONLY|os.O_CREATE, 0600)
+			if err != nil {
+				t.Errorf("Open file (write only) failed: %v", err)
+			}
+			defer fd.Close()
+			fdc, err := os.OpenFile(getCompPath("TestMonkeys"), os.O_WRONLY|os.O_CREATE, 0600)
+			if err != nil {
+				t.Errorf("Open compare file (write only) failed: %v", err)
+			}
+			defer fdc.Close()
+			len := mrand.Int() % maxlen
+			offset := mrand.Int() % maxoffset
+			cont, _ := corecrypter.RandomBytes(len)
+			_, err := fd.WriteAt(cont, int64(offset))
+			if err != nil {
+				t.Errorf("Write failed: %v", err)
+			}
+			_, err = fdc.WriteAt(cont, int64(offset))
+			if err != nil {
+				t.Errorf("Write compare failed: %v", err)
+			}
+		}(i)
+	}
+	wg.Wait()
+	if diff("TestMonkeys") {
+		t.Error("Context not matched")
 	}
 }

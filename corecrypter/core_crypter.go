@@ -2,7 +2,6 @@ package corecrypter
 
 import (
 	"crypto/rand"
-	"encoding/binary"
 	"io"
 	"log"
 )
@@ -17,17 +16,18 @@ type CoreCrypter interface {
 	Decrypt(dest, src []byte) error
 }
 
-// RandBytes gets "n" random bytes from /dev/urandom or panics
-func RandBytes(n int) []byte {
-	b := make([]byte, n)
-	if _, err := io.ReadFull(rand.Reader, b); err != nil {
-		log.Panic("Failed to read random bytes: " + err.Error())
+// RandomBytes generate a random bytes
+func RandomBytes(len int) ([]byte, error) {
+	data := make([]byte, len)
+	if _, err := io.ReadFull(rand.Reader, data); err != nil {
+		log.Printf("Generate random bytes failed: %v", err)
+		return nil, err
 	}
-	return b
+	return data, nil
 }
 
-// RandUint64 returns a secure random uint64
-func RandUint64() uint64 {
-	b := RandBytes(8)
-	return binary.BigEndian.Uint64(b)
+// RandBytes generate a random bytes
+func RandBytes(len int) []byte {
+	data, _ := RandomBytes(len)
+	return data
 }

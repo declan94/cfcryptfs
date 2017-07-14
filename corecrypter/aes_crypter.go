@@ -4,8 +4,6 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"errors"
-
-	"github.com/declan94/cfcryptfs/internal/tlog"
 )
 
 const (
@@ -70,14 +68,14 @@ func (ac *AesCrypter) EncryptWithIV(dest, src []byte, iv []byte) {
 // (i.e. by using crypto/hmdc) as well as being encrypted in order to be secure.
 // authentication will be done outside core crypter, (in content encrypter) to include file ID and block No.
 func (ac *AesCrypter) Encrypt(dest, src []byte) error {
-	ac.EncryptWithIV(dest, src, RandBytes(ac.blockSize))
-	return nil
+	iv, err := RandomBytes(ac.blockSize)
+	ac.EncryptWithIV(dest, src, iv)
+	return err
 }
 
 // Decrypt decrypt cipher
 func (ac *AesCrypter) Decrypt(dest, src []byte) error {
 	if len(src) < ac.blockSize {
-		tlog.Warn.Printf("ciphertext too short")
 		return errors.New("Ciphertext too short")
 	}
 	iv := src[:ac.blockSize]

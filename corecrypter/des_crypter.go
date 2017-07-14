@@ -4,8 +4,6 @@ import (
 	"crypto/cipher"
 	"crypto/des"
 	"errors"
-
-	"github.com/declan94/cfcryptfs/internal/tlog"
 )
 
 const (
@@ -63,14 +61,14 @@ func (dc *DesCrypter) EncryptWithIV(dest, src []byte, iv []byte) {
 // (i.e. by using crypto/hmdc) as well as being encrypted in order to be secure.
 // authentication will be done outside core crypter, (in content encrypter) to include file ID and block No.
 func (dc *DesCrypter) Encrypt(dest, src []byte) error {
-	dc.EncryptWithIV(dest, src, RandBytes(dc.blockSize))
-	return nil
+	iv, err := RandomBytes(dc.blockSize)
+	dc.EncryptWithIV(dest, src, iv)
+	return err
 }
 
 // Decrypt decrypt cipher
 func (dc *DesCrypter) Decrypt(dest, src []byte) error {
 	if len(src) < dc.blockSize {
-		tlog.Warn.Printf("ciphertext too short")
 		return errors.New("Ciphertext too short")
 	}
 	iv := src[:dc.blockSize]

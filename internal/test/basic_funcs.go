@@ -34,6 +34,10 @@ func initDirs() {
 	if err != nil {
 		log.Fatalf("Remove plain dir failed: %v", err)
 	}
+	err = os.RemoveAll(compareDir)
+	if err != nil {
+		log.Fatalf("Remove compare dir failed: %v", err)
+	}
 	err = os.MkdirAll(cipherDir, 0775)
 	if err != nil {
 		log.Fatalf("Make cipher dir failed: %v", err)
@@ -41,6 +45,10 @@ func initDirs() {
 	err = os.MkdirAll(plainDir, 0775)
 	if err != nil {
 		log.Fatalf("Make plain dir failed: %v", err)
+	}
+	err = os.MkdirAll(compareDir, 0775)
+	if err != nil {
+		log.Fatalf("Make compare dir failed: %v", err)
 	}
 }
 
@@ -85,4 +93,18 @@ func umountFs() {
 
 func getPath(relpath string) string {
 	return filepath.Join(plainDir, relpath)
+}
+
+func getCompPath(relpath string) string {
+	return filepath.Join(compareDir, relpath)
+}
+
+func diffFiles(path1 string, path2 string) bool {
+	cmd := exec.Command("diff", path1, path2)
+	err := cmd.Run()
+	return err != nil
+}
+
+func diff(relpath string) bool {
+	return diffFiles(getPath(relpath), getCompPath(relpath))
 }

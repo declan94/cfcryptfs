@@ -8,11 +8,12 @@ import (
 
 // Used to test cfcryptfs
 var (
-	cipherDir = "/tmp/test_cfcrptfs/cipher"
-	plainDir  = "/tmp/test_cfcrptfs/plain"
-	password  = "ditto"
-	command   = "cfcryptfs"
-	fsMounted = false
+	cipherDir  = "/tmp/test_cfcrptfs/cipher"
+	plainDir   = "/tmp/test_cfcrptfs/plain"
+	compareDir = "/tmp/test_cfcrptfs/compare"
+	password   = "ditto"
+	command    = "cfcryptfs"
+	fsMounted  = false
 )
 
 func init() {
