@@ -6,7 +6,6 @@
 #### v0.1.1
 * Bug fix for reading permission.
 
-#### v0.2 (developing)
+#### v0.2
 * Cache plain blocks to speed up sequential per char write/read.
 * Bug fix for reading permission problem with write only file.
-* Bug fix for random writing. (working on it)  
