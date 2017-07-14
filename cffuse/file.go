@@ -191,30 +191,33 @@ func (f *file) read(off uint64, length int, cache bool) ([]byte, fuse.Status) {
 	}
 	// Explode plain range
 	intraBlocks := f.contCrypter.ExplodePlainRange(off, length)
-	blocks := make([][]byte, len(intraBlocks))
-	// Skip cached blocks in front or at end.
-	// Only to read those in the middle
-	var left, right int
-	for left = 0; left < len(intraBlocks); left++ {
-		cached := f.ent.getCachedBlock(intraBlocks[left].BlockNo)
-		blocks[left] = cached
-		if cached == nil {
-			break
-		}
-		f.debugInfo("get cached block #%d", intraBlocks[left].BlockNo)
-	}
-	for right = len(intraBlocks) - 1; right > left; right-- {
-		cached := f.ent.getCachedBlock(intraBlocks[right].BlockNo)
-		blocks[right] = cached
-		if cached == nil {
-			break
-		}
-	}
 	f.debugInfo("read TransformRange(%d, %d) -> Block(%d - %d)", off, length, intraBlocks[0].BlockNo, intraBlocks[len(intraBlocks)-1].BlockNo)
-	if left >= len(intraBlocks) {
-		f.debugInfo("All blocks cached")
-	} else {
-		f.debugInfo("Not cached blocks (%d - %d)", intraBlocks[left].BlockNo, intraBlocks[right].BlockNo)
+	blocks := make([][]byte, len(intraBlocks))
+	var left, right int = 0, len(intraBlocks) - 1
+	if cache {
+		// if cache is false, called by Write or Truncate, we have checked cache
+		// Skip cached blocks in front or at end.
+		// Only to read those in the middle
+		for left = 0; left < len(intraBlocks); left++ {
+			cached := f.ent.getCachedBlock(intraBlocks[left].BlockNo)
+			blocks[left] = cached
+			if cached == nil {
+				break
+			}
+			f.debugInfo("get cached block #%d", intraBlocks[left].BlockNo)
+		}
+		for right = len(intraBlocks) - 1; right > left; right-- {
+			cached := f.ent.getCachedBlock(intraBlocks[right].BlockNo)
+			blocks[right] = cached
+			if cached == nil {
+				break
+			}
+		}
+		if left >= len(intraBlocks) {
+			f.debugInfo("All blocks cached")
+		} else {
+			f.debugInfo("Not cached blocks (%d - %d)", intraBlocks[left].BlockNo, intraBlocks[right].BlockNo)
+		}
 	}
 	// If left > right, all blocks have read from cache, no need to read file
 	if left <= right {
@@ -257,7 +260,6 @@ func (f *file) read(off uint64, length int, cache bool) ([]byte, fuse.Status) {
 			}
 		}
 	}
-
 	// Crop down to the relevant part
 	var out []byte
 	pBuf := bytes.NewBuffer(f.contCrypter.PReqPool.Get()[:0])
@@ -374,7 +376,7 @@ func (f *file) write(data []byte, off int64) (uint32, fuse.Status) {
 			f.debugInfo("Rewrite: len(oldData)=%d len(blockData)=%d offset=%d", len(oldData), len(blockData), b.Skip)
 			blockData = f.contCrypter.RewriteBlock(oldData, blockData, int(b.Skip))
 			f.debugInfo("Cache Block #%d", b.BlockNo)
-			f.ent.cacheBlock(b.BlockNo, blockData, true)
+			f.ent.cacheBlock(b.BlockNo, blockData, false)
 		}
 		f.debugInfo("Writing %d bytes to block #%d", len(blockData), b.BlockNo)
 		// Write into the to-encrypt list

@@ -54,20 +54,25 @@ func (f *file) Truncate(newSize uint64) fuse.Status {
 	}
 
 	// File shrinks
-	f.ent.purgeCachedBlocks()
 	blockNo := f.contCrypter.PlainOffToBlockNo(newSize)
 	cipherOff := f.contCrypter.BlockNoToCipherOff(blockNo)
 	plainOff := f.contCrypter.BlockNoToPlainOff(blockNo)
 	lastBlockLen := newSize - plainOff
 	var data []byte
 	if lastBlockLen > 0 {
-		var status fuse.Status
-		data, status = f.read(plainOff, int(lastBlockLen), false)
-		if status != fuse.OK {
-			tlog.Warn.Printf("Truncate: shrink doRead returned error: %v", err)
-			return status
+		cachedBlock := f.ent.getCachedBlock(blockNo)
+		if cachedBlock != nil {
+			data = cachedBlock[:lastBlockLen]
+		} else {
+			var status fuse.Status
+			data, status = f.read(plainOff, int(lastBlockLen), false)
+			if status != fuse.OK {
+				tlog.Warn.Printf("Truncate: shrink doRead returned error: %v", err)
+				return status
+			}
 		}
 	}
+	f.ent.purgeCachedBlocks()
 	// Truncate down to the last complete block
 	err = syscall.Ftruncate(int(f.fd.Fd()), int64(cipherOff))
 	if err != nil {
