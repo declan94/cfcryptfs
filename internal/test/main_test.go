@@ -46,12 +46,12 @@ func TestRandomWrite(t *testing.T) {
 		defer umountFs()
 	}
 	bs := 520
-	cnt := 12
+	cnt := 8
 	length := bs * cnt
 	text, _ := corecrypter.RandomBytes(length)
 	index := mrand.Perm(cnt)
+	fd, err := os.OpenFile(getPath("TestRandomWrite"), os.O_WRONLY|os.O_CREATE, 0600)
 	for i := 0; i < cnt; i++ {
-		fd, err := os.OpenFile(getPath("TestRandomWrite"), os.O_WRONLY|os.O_CREATE, 0600)
 		if err != nil {
 			t.Errorf("Open file (write only) failed: %v", err)
 		}
@@ -71,8 +71,8 @@ func TestRandomWrite(t *testing.T) {
 		if n < len(part) {
 			t.Errorf("Write len small: %d < %d", n, len(text))
 		}
-		fd.Close()
 	}
+	fd.Close()
 	fd2, err := os.OpenFile(getPath("TestRandomWrite"), os.O_RDONLY, 0600)
 	if err != nil {
 		t.Fatalf("Open file (read only) failed: %v", err)
@@ -123,6 +123,42 @@ func TestRewrite(t *testing.T) {
 	fd2.Read(text2)
 	if !bytes.Equal(text, text2) {
 		t.Error("Context not matched")
+	}
+}
+
+func TestEOF(t *testing.T) {
+	if !fsMounted {
+		initMountFs()
+		defer umountFs()
+	}
+	length := 2048 + 128
+	text, _ := corecrypter.RandomBytes(length)
+	fd, err := os.OpenFile(getPath("TestRandomWrite"), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	if err != nil {
+		t.Fatalf("Open file (write) failed: %v", err)
+	}
+	_, err = fd.Write(text)
+	if err != nil {
+		t.Fatalf("Write file failed: %v", err)
+	}
+	fd.Close()
+	fd2, err := os.OpenFile(getPath("TestRandomWrite"), os.O_RDONLY, 0600)
+	if err != nil {
+		t.Fatalf("Open file (read) failed: %v", err)
+	}
+	text2 := make([]byte, length)
+	defer fd2.Close()
+	n, err := fd2.ReadAt(text2, 1)
+	if err != io.EOF {
+		t.Fatalf("Not eof error: %v", err)
+	}
+	if n != length-1 {
+		t.Fatalf("Read n: %d, length: %d", n, length)
+	}
+	if !bytes.Equal(text[1:], text2[:length-1]) {
+		t.Error("Context not matched")
+		t.Errorf("truth: %v", text[1:])
+		t.Errorf("resul: %v", text2[:length-1])
 	}
 }
 

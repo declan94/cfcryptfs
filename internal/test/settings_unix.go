@@ -8,5 +8,5 @@ const (
 	plainDir  = "/tmp/test_cfcrptfs/plain"
 	password  = "ditto"
 	command   = "cfcryptfs"
-	fsMounted = true
+	fsMounted = false
 )
