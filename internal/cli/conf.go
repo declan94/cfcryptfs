@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"os/exec"
+
 	"github.com/declan94/cfcryptfs/cffuse"
 	"github.com/declan94/cfcryptfs/corecrypter"
 	"github.com/declan94/cfcryptfs/internal/exitcode"
@@ -61,6 +63,37 @@ func InitCipherDir(cipherDir string) {
 
 	tlog.Info.Printf("\nInitialize directory finished: %s", cipherDir)
 	tlog.Info.Printf(conf.String())
+}
+
+// ChangeCipherPwd changes password
+func ChangeCipherPwd(cipherDir string, key []byte) {
+	var pwd string
+	var err error
+	for true {
+		fmt.Println("Enter your new password")
+		pwd, err = readpwd.Twice("")
+		if err != nil {
+			tlog.Warn.Println(err)
+		} else {
+			break
+		}
+	}
+	exec.Command("rm", filepath.Join(cipherDir, cffuse.KeyFileTmp)).Run()
+	err = exec.Command("mv", filepath.Join(cipherDir, cffuse.KeyFile), filepath.Join(cipherDir, cffuse.KeyFileTmp)).Run()
+	if err != nil {
+		tlog.Fatal.Printf("Backup old keyfile failed: %v", err)
+		os.Exit(exitcode.KeyFile)
+	}
+	err = keycrypter.StoreKey(filepath.Join(cipherDir, cffuse.KeyFile), pwd, key)
+	if err != nil {
+		tlog.Fatal.Printf("Store new keyfile failed: %v\n", err)
+		err = exec.Command("mv", filepath.Join(cipherDir, cffuse.KeyFileTmp), filepath.Join(cipherDir, cffuse.KeyFile)).Run()
+		if err != nil {
+			tlog.Fatal.Printf("Recover old keyfile failed: %v", err)
+			tlog.Info.Printf("You may need to use emergency mode")
+		}
+		os.Exit(exitcode.KeyFile)
+	}
 }
 
 // InfoCipherDir print information about a cipher directory
@@ -147,7 +180,7 @@ func generateKey(path string, cryptType int) {
 	for true {
 		pwd, err = readpwd.Twice("")
 		if err != nil {
-			fmt.Println(err)
+			tlog.Warn.Println(err)
 		} else {
 			break
 		}

@@ -26,6 +26,7 @@ type Args struct {
 	Debug      bool
 	Init       bool
 	Info       bool
+	ChangePwd  bool
 	Foreground bool
 	AllowOther bool
 	ParentPid  int
@@ -48,7 +49,7 @@ func printMyFlagSet(avoid map[string]bool) {
 
 func usage() {
 	fmt.Printf("Usage: %s [options] CIPHERDIR MOUNTPOINT\n", path.Base(os.Args[0]))
-	fmt.Printf("   or: %s -init|-info CIPHERDIR\n", path.Base(os.Args[0]))
+	fmt.Printf("   or: %s -init|-info|-chpwd CIPHERDIR\n", path.Base(os.Args[0]))
 	fmt.Printf("\noptions:\n")
 	printMyFlagSet(map[string]bool{
 		"debug":      true,
@@ -67,6 +68,7 @@ func ParseArgs() (args Args) {
 	flagSet.BoolVar(&args.Debug, "debug", false, "Debug mode - internal use")
 	flagSet.BoolVar(&args.Init, "init", false, "Initialize a cipher directory.")
 	flagSet.BoolVar(&args.Info, "info", false, "Print infomation about a cipher directory.")
+	flagSet.BoolVar(&args.ChangePwd, "chpwd", false, "Change password of a cipher directory.")
 	flagSet.BoolVar(&args.Foreground, "f", false, "Run in the Foreground.")
 	flagSet.BoolVar(&args.AllowOther, "allow_other", false, "Allow other users to access the filesystem. \nOnly works if user_allow_other is set in /etc/fuse.conf.")
 	flagSet.IntVar(&args.ParentPid, "parent_pid", 0, "Parent process pid - internal use")
@@ -97,7 +99,7 @@ func ParseArgs() (args Args) {
 			tlog.Fatal.Printf("Invalid cipherdir: %v", err)
 			os.Exit(exitcode.CipherDir)
 		}
-	} else if args.Info {
+	} else if args.Info || args.ChangePwd {
 		if flagSet.NArg() != 1 {
 			usage()
 		}

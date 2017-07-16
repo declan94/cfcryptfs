@@ -5,6 +5,8 @@ const (
 	ConfFile = ".cfcryptfs.cfg"
 	// KeyFile save encrypted key
 	KeyFile = ".cfcryptfs.key"
+	// KeyFileTmp is used when changing pwd
+	KeyFileTmp = ".cfcryptfs.key.tmp"
 )
 
 // ReservedNames stores names reserved for filesystem

@@ -20,4 +20,7 @@ func init() {
 	if _, has := os.LookupEnv("FS"); has {
 		fsMounted = true
 	}
+	if os.Getenv("CIPHER") != "" {
+		cipherDir = os.Getenv("CIPHER")
+	}
 }

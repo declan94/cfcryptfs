@@ -57,7 +57,7 @@ func StoreKey(path string, pwd string, key []byte) error {
 	if err != nil {
 		return fmt.Errorf("Encrypt key failed: %v", err)
 	}
-	fd, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0600)
+	fd, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		return fmt.Errorf("Open key file failed: %s", err)
 	}

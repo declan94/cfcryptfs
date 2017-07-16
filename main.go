@@ -33,6 +33,12 @@ func main() {
 		return
 	}
 
+	if args.ChangePwd {
+		key := cli.LoadKey(args.CipherDir, args.PwdFile, args.Password)
+		cli.ChangeCipherPwd(args.CipherDir, key)
+		return
+	}
+
 	if !args.Foreground {
 		os.Exit(forkChild())
 	}
