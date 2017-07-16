@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"os/exec"
+	"os/user"
 
 	"github.com/declan94/cfcryptfs/cffuse"
 	"github.com/declan94/cfcryptfs/corecrypter"
@@ -19,6 +20,7 @@ import (
 )
 
 const currentVersion = 0
+const emergencyPassword = "CFEmergencyPassword"
 
 // CipherConfig is the content of a config file.
 type CipherConfig struct {
@@ -27,6 +29,11 @@ type CipherConfig struct {
 	CryptTypeStr string
 	PlainBS      int
 	PlainPath    bool
+}
+
+func (cfg *CipherConfig) String() string {
+	return fmt.Sprintf("On-disk Version: %d\nEncryption Type: %s\nPlaintext Block Size: %.2fKB\nEncrypt Filepath: %v\n",
+		cfg.Version, cfg.CryptTypeStr, float32(cfg.PlainBS)/1024, !cfg.PlainPath)
 }
 
 // InitCipherDir initialize a cipher directory
@@ -53,20 +60,27 @@ func InitCipherDir(cipherDir string) {
 	input = strings.Trim(input, " \t")
 	conf.PlainPath = (strings.ToUpper(input) == "N")
 
-	generateKey(filepath.Join(cipherDir, cffuse.KeyFile), conf.CryptType)
+	// Genreate a random key
+	key, err := corecrypter.RandomKey(conf.CryptType)
+	if err != nil {
+		tlog.Fatal.Printf("Generate random key failed: %v\n", err)
+		os.Exit(exitcode.KeyFile)
+	}
+	SaveKey(cipherDir, key)
 
-	err := SaveConf(filepath.Join(cipherDir, cffuse.ConfFile), conf)
+	err = SaveConf(filepath.Join(cipherDir, cffuse.ConfFile), conf)
 	if err != nil {
 		tlog.Fatal.Printf("Write conf file failed: %s\n", err)
 		os.Exit(exitcode.Config)
 	}
 
-	tlog.Info.Printf("\nInitialize directory finished: %s", cipherDir)
-	tlog.Info.Printf(conf.String())
+	fmt.Printf("\nInitialize directory finished: %s", cipherDir)
+	fmt.Printf(conf.String())
 }
 
 // ChangeCipherPwd changes password
-func ChangeCipherPwd(cipherDir string, key []byte) {
+func ChangeCipherPwd(cipherDir string) {
+	key := LoadKey(cipherDir, "", "")
 	var pwd string
 	var err error
 	for true {
@@ -94,13 +108,14 @@ func ChangeCipherPwd(cipherDir string, key []byte) {
 		}
 		os.Exit(exitcode.KeyFile)
 	}
+	fmt.Printf("\nPassword changed: %s\n", cipherDir)
 }
 
 // InfoCipherDir print information about a cipher directory
 func InfoCipherDir(cipherDir string) {
 	conf := LoadConf(cipherDir)
-	tlog.Info.Printf("Cipher Directory: %s", cipherDir)
-	tlog.Info.Printf(conf.String())
+	fmt.Printf("Cipher Directory: %s", cipherDir)
+	fmt.Printf(conf.String())
 }
 
 // LoadConf load config of the cipher directory
@@ -130,6 +145,25 @@ func LoadKey(cipherDir string, pwdfile string, password string) []byte {
 	return key
 }
 
+// SaveKey ask for password, encrypted key using the password and then save to file
+func SaveKey(cipherDir string, key []byte) {
+	var err error
+	var pwd string
+	for true {
+		pwd, err = readpwd.Twice("")
+		if err != nil {
+			tlog.Warn.Println(err)
+		} else {
+			break
+		}
+	}
+	err = keycrypter.StoreKey(filepath.Join(cipherDir, cffuse.KeyFile), pwd, key)
+	if err != nil {
+		tlog.Fatal.Printf("Store key failed: %v\n", err)
+		os.Exit(exitcode.KeyFile)
+	}
+}
+
 // ReadConf read cipher conf from file and parse it
 func ReadConf(path string) (cf CipherConfig) {
 	// Read from disk
@@ -154,7 +188,7 @@ func ReadConf(path string) (cf CipherConfig) {
 
 // SaveConf save cipher conf file to disk
 func SaveConf(path string, cf CipherConfig) error {
-	fd, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0600)
+	fd, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		return err
 	}
@@ -167,29 +201,6 @@ func SaveConf(path string, cf CipherConfig) error {
 	js = append(js, '\n')
 	_, err = fd.Write(js)
 	return err
-}
-
-func generateKey(path string, cryptType int) {
-	// Genreate a random key
-	key, err := corecrypter.RandomKey(cryptType)
-	if err != nil {
-		tlog.Fatal.Printf("Generate random key failed: %v\n", err)
-		os.Exit(exitcode.KeyFile)
-	}
-	var pwd string
-	for true {
-		pwd, err = readpwd.Twice("")
-		if err != nil {
-			tlog.Warn.Println(err)
-		} else {
-			break
-		}
-	}
-	err = keycrypter.StoreKey(path, pwd, key)
-	if err != nil {
-		tlog.Fatal.Printf("Store key failed: %v\n", err)
-		os.Exit(exitcode.KeyFile)
-	}
 }
 
 // String get string value of crypttype
@@ -240,7 +251,14 @@ func blockSize(index int) int {
 	}
 }
 
-func (cfg *CipherConfig) String() string {
-	return fmt.Sprintf("On-disk Version: %d\nEncryption Type: %s\nPlaintext Block Size: %.2fKB\nEncrypt Filepath: %v\n",
-		cfg.Version, cfg.CryptTypeStr, float32(cfg.PlainBS)/1024, !cfg.PlainPath)
+func expandPath(path string) string {
+	if len(path) == 0 || path[0] != '~' {
+		return path
+	}
+
+	usr, err := user.Current()
+	if err != nil {
+		return path
+	}
+	return filepath.Join(usr.HomeDir, path[1:])
 }

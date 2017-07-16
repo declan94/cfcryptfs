@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"os/user"
 	"path"
 	"path/filepath"
 	"strings"
@@ -22,11 +21,14 @@ type Args struct {
 	MountPoint string
 	PwdFile    string
 	Password   string
+	Emergency  string
 	DebugFuse  bool
 	Debug      bool
 	Init       bool
 	Info       bool
 	ChangePwd  bool
+	Export     bool
+	Recover    bool
 	Foreground bool
 	AllowOther bool
 	ParentPid  int
@@ -49,7 +51,8 @@ func printMyFlagSet(avoid map[string]bool) {
 
 func usage() {
 	fmt.Printf("Usage: %s [options] CIPHERDIR MOUNTPOINT\n", path.Base(os.Args[0]))
-	fmt.Printf("   or: %s -init|-info|-chpwd CIPHERDIR\n", path.Base(os.Args[0]))
+	fmt.Printf("   or: %s -init|-info|-chpwd|-export CIPHERDIR\n", path.Base(os.Args[0]))
+	fmt.Printf("   or: %s -export|-recover [-emergency_file FILE] CIPHERDIR\n", path.Base(os.Args[0]))
 	fmt.Printf("\noptions:\n")
 	printMyFlagSet(map[string]bool{
 		"debug":      true,
@@ -62,6 +65,7 @@ func usage() {
 func ParseArgs() (args Args) {
 	flagSet = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 
+	flagSet.StringVar(&args.Emergency, "emergency_file", "", "Emergency mode. Specify the emergency filepath.")
 	flagSet.StringVar(&args.PwdFile, "passfile", "", "Password file path.")
 	flagSet.StringVar(&args.Password, "password", "", "Specify password.")
 	flagSet.BoolVar(&args.DebugFuse, "debugfuse", false, "Show fuse Debug messages.")
@@ -69,6 +73,8 @@ func ParseArgs() (args Args) {
 	flagSet.BoolVar(&args.Init, "init", false, "Initialize a cipher directory.")
 	flagSet.BoolVar(&args.Info, "info", false, "Print infomation about a cipher directory.")
 	flagSet.BoolVar(&args.ChangePwd, "chpwd", false, "Change password of a cipher directory.")
+	flagSet.BoolVar(&args.Export, "export", false, "Export configs and key for emergency usage.")
+	flagSet.BoolVar(&args.Recover, "recover", false, "Recover cipher directory's config and key.")
 	flagSet.BoolVar(&args.Foreground, "f", false, "Run in the Foreground.")
 	flagSet.BoolVar(&args.AllowOther, "allow_other", false, "Allow other users to access the filesystem. \nOnly works if user_allow_other is set in /etc/fuse.conf.")
 	flagSet.IntVar(&args.ParentPid, "parent_pid", 0, "Parent process pid - internal use")
@@ -99,7 +105,7 @@ func ParseArgs() (args Args) {
 			tlog.Fatal.Printf("Invalid cipherdir: %v", err)
 			os.Exit(exitcode.CipherDir)
 		}
-	} else if args.Info || args.ChangePwd {
+	} else if args.Info || args.ChangePwd || args.Export || args.Recover {
 		if flagSet.NArg() != 1 {
 			usage()
 		}
@@ -125,18 +131,6 @@ func ParseArgs() (args Args) {
 	tlog.Debug.Enabled = args.Debug
 
 	return args
-}
-
-func expandPath(path string) string {
-	if len(path) == 0 || path[0] != '~' {
-		return path
-	}
-
-	usr, err := user.Current()
-	if err != nil {
-		return path
-	}
-	return filepath.Join(usr.HomeDir, path[1:])
 }
 
 // checkDirEmpty - check if "dir" exists and is an empty directory

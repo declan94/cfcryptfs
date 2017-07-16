@@ -34,8 +34,17 @@ func main() {
 	}
 
 	if args.ChangePwd {
-		key := cli.LoadKey(args.CipherDir, args.PwdFile, args.Password)
-		cli.ChangeCipherPwd(args.CipherDir, key)
+		cli.ChangeCipherPwd(args.CipherDir)
+		return
+	}
+
+	if args.Export {
+		cli.ExportEmergencyFile(args.CipherDir, args.Emergency)
+		return
+	}
+
+	if args.Recover {
+		cli.RecoverCipherDir(args.CipherDir, args.Emergency)
 		return
 	}
 
@@ -43,8 +52,14 @@ func main() {
 		os.Exit(forkChild())
 	}
 
-	conf := cli.LoadConf(args.CipherDir)
-	key := cli.LoadKey(args.CipherDir, args.PwdFile, args.Password)
+	var conf cli.CipherConfig
+	var key []byte
+	if args.Emergency != "" {
+		conf, key = cli.LoadEmergencyFile(args.Emergency)
+	} else {
+		conf = cli.LoadConf(args.CipherDir)
+		key = cli.LoadKey(args.CipherDir, args.PwdFile, args.Password)
+	}
 	// Check mountpoint
 	// We cannot mount "/home/user/.cipher" at "/home/user" because the mount
 	// will hide ".cipher" also for us.

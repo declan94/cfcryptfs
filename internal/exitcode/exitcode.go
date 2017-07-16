@@ -7,7 +7,7 @@ const (
 	Usage = 1
 	// 2 is reserved because it is used by Go panic
 
-	// Config means open/read/parse conf file failed
+	// Config means open/read/parse conf file or emergency conf file failed
 	Config = iota + 1
 	// KeyFile means open/read keyfile failed or invalid key len in keyfile
 	KeyFile
