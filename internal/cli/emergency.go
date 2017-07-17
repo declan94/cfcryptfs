@@ -80,7 +80,7 @@ func ExportEmergencyFile(cipherDir, outpath string) {
 	fmt.Printf("Emergency file exported: %s\n", outpath)
 	fmt.Println("Make sure you keep it SAFE and SECRET")
 	fmt.Printf("Use `%scfcryptfs -emergency_file THIS_FILE CIPHERDIR MOUNTPOINT%s`"+
-		" when config or keyfile are damaged or you forget passowrd.", tlog.ColorGreen, tlog.ColorReset)
+		" when config or keyfile are damaged or you forget passowrd.\n", tlog.ColorGreen, tlog.ColorReset)
 }
 
 // LoadEmergencyFile load conf and key from a emergency file
