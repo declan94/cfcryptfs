@@ -65,6 +65,7 @@ Besides encryption methods, You can also choose different encryption block size,
 * HMAC signature for file header provides resistence to file mode tamper. 
 * HMAC signature with file IV and block id included in the key provides resistance to content tamper and block copying tamper.
 * Generated IV from fullpath for filepath encryption provides resistance to file moving tamper. (in encrypted filepath mode)
+* Provides two types of encryption key protection: 1) Using password to encrypt the key.  2) Using [Shamir's Secret Sharing](https://en.wikipedia.org/wiki/Shamir's_Secret_Sharing) scheme to split key into multiple keyfiles.
 
 
 

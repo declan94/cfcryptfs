@@ -1,11 +1,9 @@
 package cli
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
-
-	"fmt"
-
 	"strings"
 
 	"github.com/declan94/cfcryptfs/cffuse"
