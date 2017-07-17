@@ -37,7 +37,7 @@ type ContentCrypter struct {
 // NewContentCrypter initiate a ContentCrypter
 func NewContentCrypter(core corecrypter.CoreCrypter, plainBS int) *ContentCrypter {
 	// encrypted length plus signature length
-	cipherBS := core.LenAfterEncrypted(plainBS) + signLen
+	cipherBS := core.EncryptedLen(plainBS) + signLen
 	cReqSize := int(fuse.MAX_KERNEL_WRITE / plainBS * cipherBS)
 	cc := &ContentCrypter{
 		core:         core,
@@ -73,7 +73,7 @@ func (cc *ContentCrypter) encryptBlock(plain []byte, blockNo uint64, fileID []by
 	if err := cc.core.Encrypt(cBlock, plain); err != nil {
 		return nil, err
 	}
-	cipherDataLen := cc.core.LenAfterEncrypted(len(plain))
+	cipherDataLen := cc.core.EncryptedLen(len(plain))
 	// Block is authenticated with block numccr and file ID
 	copy(cBlock[cipherDataLen:], cc.makeSign(cBlock[:cipherDataLen], blockNo, fileID))
 	cBlock = cBlock[:cipherDataLen+signLen]
@@ -103,7 +103,7 @@ func (cc *ContentCrypter) decryptBlock(cipher []byte, blockNo uint64, fileID []b
 	// decrypt cipherdata
 	pBlock := cc.PBlockPool.Get()
 	err := cc.core.Decrypt(pBlock, cipherDataBlock)
-	pBlock = pBlock[:cc.core.LenAfterDecrypted(len(cipherDataBlock))]
+	pBlock = pBlock[:cc.core.DecryptedLen(len(cipherDataBlock))]
 	return pBlock, err
 }
 

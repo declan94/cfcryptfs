@@ -4,12 +4,12 @@ package main
 type helloCrypter struct {
 }
 
-// LenAfterEncrypted return encrypted length according to plaintext length
-func (hc *helloCrypter) LenAfterEncrypted(plainLen int) int {
+// EncryptedLen return encrypted length according to plaintext length
+func (hc *helloCrypter) EncryptedLen(plainLen int) int {
 	return plainLen
 }
 
-func (hc *helloCrypter) LenAfterDecrypted(cipherLen int) int {
+func (hc *helloCrypter) DecryptedLen(cipherLen int) int {
 	return cipherLen
 }
 

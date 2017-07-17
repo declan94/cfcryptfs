@@ -23,7 +23,7 @@ func testAesCrypter(plainLen int, t *testing.T) {
 	}
 	ac := NewAesCrypter(key)
 	plainText := RandBytes(plainLen)
-	desiredLen := ac.LenAfterEncrypted(len(plainText))
+	desiredLen := ac.EncryptedLen(len(plainText))
 	cipher := make([]byte, desiredLen)
 	ac.Encrypt(cipher, plainText)
 	if cap(cipher) > desiredLen {
@@ -45,7 +45,7 @@ func testDesCrypter(plainLen int, t *testing.T) {
 	}
 	ac := NewDesCrypter(key)
 	plainText := RandBytes(plainLen)
-	desiredLen := ac.LenAfterEncrypted(len(plainText))
+	desiredLen := ac.EncryptedLen(len(plainText))
 	cipher := make([]byte, desiredLen)
 	ac.Encrypt(cipher, plainText)
 	if cap(cipher) > desiredLen {

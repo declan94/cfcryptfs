@@ -31,13 +31,13 @@ func NewDesCrypter(key []byte) *DesCrypter {
 	return crypter
 }
 
-// LenAfterEncrypted encrypted info length given plain info with specific length
-func (dc *DesCrypter) LenAfterEncrypted(plainLen int) int {
+// EncryptedLen encrypted info length given plain info with specific length
+func (dc *DesCrypter) EncryptedLen(plainLen int) int {
 	return plainLen + dc.blockSize
 }
 
-// LenAfterDecrypted decrypted info length given cipher with specific length
-func (dc *DesCrypter) LenAfterDecrypted(cipherLen int) int {
+// DecryptedLen decrypted info length given cipher with specific length
+func (dc *DesCrypter) DecryptedLen(cipherLen int) int {
 	if cipherLen-dc.blockSize < 0 {
 		return 0
 	}

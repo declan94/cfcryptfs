@@ -60,7 +60,7 @@ func encryptKey(key []byte, password string, p encryptParam) ([]byte, error) {
 		return nil, err
 	}
 	crypter := corecrypter.NewAesCrypter(pwdKey)
-	dest := make([]byte, crypter.LenAfterEncrypted(len(key)))
+	dest := make([]byte, crypter.EncryptedLen(len(key)))
 	crypter.Encrypt(dest, key)
 	return dest, nil
 }
@@ -71,7 +71,7 @@ func decryptKey(encKey []byte, password string, p encryptParam) ([]byte, error) 
 		return nil, err
 	}
 	crypter := corecrypter.NewAesCrypter(pwdKey)
-	dest := make([]byte, crypter.LenAfterDecrypted(len(encKey)))
+	dest := make([]byte, crypter.DecryptedLen(len(encKey)))
 	err = crypter.Decrypt(dest, encKey)
 	if err != nil {
 		return nil, err

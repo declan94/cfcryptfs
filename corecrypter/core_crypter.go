@@ -8,8 +8,10 @@ import (
 
 // CoreCrypter defines interface for core crypt module
 type CoreCrypter interface {
-	LenAfterEncrypted(plainLen int) int
-	LenAfterDecrypted(cipherLen int) int
+	// EncryptedLen returns length of encrypted byte stream, given the plain byte stream length
+	EncryptedLen(plainLen int) int
+	// DecrytpedLen returns length of plain byte stream, given the encrypted byte stream length
+	DecryptedLen(cipherLen int) int
 	// Encrypt encrypt src to dest
 	Encrypt(dest, src []byte) error
 	// Decrypt decrypt src to dest

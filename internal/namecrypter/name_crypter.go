@@ -103,7 +103,7 @@ func (nc *NameCrypter) DecryptPath(path string) (string, error) {
 //	use encryption like content crypt do avoid leak information of the plain filename
 func (nc *NameCrypter) EncryptLink(path string) string {
 	src := []byte(path)
-	len := nc.AesCrypter.LenAfterEncrypted(len(src))
+	len := nc.AesCrypter.EncryptedLen(len(src))
 	dest := make([]byte, len)
 	nc.AesCrypter.Encrypt(dest, src)
 	return base64.URLEncoding.EncodeToString(dest)
@@ -115,7 +115,7 @@ func (nc *NameCrypter) DecryptLink(cpath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	len := nc.AesCrypter.LenAfterDecrypted(len(src))
+	len := nc.AesCrypter.DecryptedLen(len(src))
 	dest := make([]byte, len)
 	err = nc.AesCrypter.Decrypt(dest, src)
 	if err != nil {

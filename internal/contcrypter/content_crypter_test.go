@@ -27,7 +27,7 @@ func getCC(plainBS int) (*ContentCrypter, corecrypter.CoreCrypter) {
 func TestCryptBlock(t *testing.T) {
 	cc, ac := getCC(1024)
 	plainText := []byte("hello world")
-	desiredLen := ac.LenAfterEncrypted(len(plainText)) + signLen
+	desiredLen := ac.EncryptedLen(len(plainText)) + signLen
 	cipher := cc.encryptBlock(plainText, 0, fileID)
 	if len(cipher) > desiredLen {
 		t.Errorf("cipher len larger than desired value (%d > %d)", cap(cipher), desiredLen)
