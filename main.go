@@ -58,7 +58,11 @@ func main() {
 		conf, key = cli.LoadEmergencyFile(args.Emergency)
 	} else {
 		conf = cli.LoadConf(args.CipherDir)
-		key = cli.LoadKey(args.CipherDir, args.PwdFile, args.Password)
+		if conf.KeyCryptType == cli.KeyCryptTypePWD {
+			key = cli.LoadKey(args.CipherDir, args.PwdFile, args.Password)
+		} else {
+			key = cli.LoadKeySSS(args.KeyFiles)
+		}
 	}
 	// Check mountpoint
 	// We cannot mount "/home/user/.cipher" at "/home/user" because the mount

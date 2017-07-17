@@ -22,12 +22,20 @@ import (
 const currentVersion = 0
 const emergencyPassword = "CFEmergencyPassword"
 
+const (
+	// KeyCryptTypePWD key crypt using password
+	KeyCryptTypePWD = 0
+	// KeyCryptTypeSSS key crypt using Shamir's Secret Sharing scheme
+	KeyCryptTypeSSS = 1
+)
+
 // CipherConfig is the content of a config file.
 type CipherConfig struct {
 	Version      int
 	CryptType    int
 	CryptTypeStr string
 	PlainBS      int
+	KeyCryptType int
 	PlainPath    bool
 }
 
@@ -49,7 +57,7 @@ func InitCipherDir(cipherDir string) {
 		conf.CryptType = str2CryptType(input)
 	}
 	for conf.PlainBS == 0 {
-		fmt.Printf("Choose a block size(1: 2KB; 2: 4KB; 3: 8KB; 4:16KB): ")
+		fmt.Printf("Choose a block size(1: 4KB; 2: 8KB; 3: 16KB; 4:32KB): ")
 		fmt.Scanf("%d\n", &conf.PlainBS)
 		conf.PlainBS = blockSize(conf.PlainBS)
 	}
@@ -66,7 +74,24 @@ func InitCipherDir(cipherDir string) {
 		tlog.Fatal.Printf("Generate random key failed: %v\n", err)
 		os.Exit(exitcode.KeyFile)
 	}
-	SaveKey(cipherDir, key)
+
+	for true {
+		var t int
+		fmt.Printf("Choose a key protection type (1: Password, 2: Multi Key File): ")
+		fmt.Scanf("%d\n", &t)
+		if t == 1 || t == 2 {
+			conf.KeyCryptType = t - 1
+			break
+		}
+	}
+
+	switch conf.KeyCryptType {
+	case KeyCryptTypePWD:
+		SaveKey(cipherDir, key)
+	case KeyCryptTypeSSS:
+		SaveKeySSS(cipherDir, key)
+	default:
+	}
 
 	err = SaveConf(filepath.Join(cipherDir, cffuse.ConfFile), conf)
 	if err != nil {
@@ -134,35 +159,6 @@ func LoadConf(cipherDir string) CipherConfig {
 		os.Exit(exitcode.Config)
 	}
 	return conf
-}
-
-// LoadKey load encryption key of the cipher directory
-func LoadKey(cipherDir string, pwdfile string, password string) []byte {
-	key, err := keycrypter.LoadKey(filepath.Join(cipherDir, cffuse.KeyFile), pwdfile, password)
-	if err != nil {
-		tlog.Fatal.Println(err)
-		os.Exit(exitcode.KeyFile)
-	}
-	return key
-}
-
-// SaveKey ask for password, encrypted key using the password and then save to file
-func SaveKey(cipherDir string, key []byte) {
-	var err error
-	var pwd string
-	for true {
-		pwd, err = readpwd.Twice("")
-		if err != nil {
-			tlog.Warn.Println(err)
-		} else {
-			break
-		}
-	}
-	err = keycrypter.StoreKey(filepath.Join(cipherDir, cffuse.KeyFile), pwd, key)
-	if err != nil {
-		tlog.Fatal.Printf("Store key failed: %v\n", err)
-		os.Exit(exitcode.KeyFile)
-	}
 }
 
 // ReadConf read cipher conf from file and parse it
@@ -240,13 +236,13 @@ func str2CryptType(str string) int {
 func blockSize(index int) int {
 	switch index {
 	case 1:
-		return 2 * 1024
-	case 2:
 		return 4 * 1024
-	case 3:
+	case 2:
 		return 8 * 1024
+	case 3:
+		return 16 * 1024
 	case 4:
-		return 16 * 102
+		return 32 * 102
 	default:
 		return 0
 	}

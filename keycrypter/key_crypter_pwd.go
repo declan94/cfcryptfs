@@ -12,7 +12,7 @@ import (
 	"golang.org/x/crypto/scrypt"
 )
 
-// keycypter provides safe ways to store encryption key in file with password
+// provides safe ways to store encryption key in file with password
 // | encrypt param serialize | plain key md5 | encrypted key |
 
 const (

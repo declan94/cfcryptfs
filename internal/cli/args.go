@@ -22,6 +22,7 @@ type Args struct {
 	PwdFile    string
 	Password   string
 	Emergency  string
+	KeyFiles   string
 	DebugFuse  bool
 	Debug      bool
 	Init       bool
@@ -68,6 +69,7 @@ func ParseArgs() (args Args) {
 	flagSet.StringVar(&args.Emergency, "emergency_file", "", "Emergency mode. Specify the emergency filepath.")
 	flagSet.StringVar(&args.PwdFile, "passfile", "", "Password file path.")
 	flagSet.StringVar(&args.Password, "password", "", "Specify password.")
+	flagSet.StringVar(&args.KeyFiles, "keys", "", "Specify split keyfiles separated by comma. (In multiple keyfiles mode)")
 	flagSet.BoolVar(&args.DebugFuse, "debugfuse", false, "Show fuse Debug messages.")
 	flagSet.BoolVar(&args.Debug, "debug", false, "Debug mode - internal use")
 	flagSet.BoolVar(&args.Init, "init", false, "Initialize a cipher directory.")
