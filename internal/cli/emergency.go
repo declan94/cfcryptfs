@@ -64,6 +64,7 @@ func ExportEmergencyFile(cipherDir, outpath string) {
 					continue
 				}
 			}
+			break
 		}
 	}
 	fd, err := os.OpenFile(outpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
