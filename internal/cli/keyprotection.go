@@ -65,28 +65,32 @@ func SaveKeySSS(cipherDir string, key []byte) {
 			}
 		}
 	}
-	var dir string
-	for true {
-		dir = ""
-		fmt.Printf("Directory to store split keys: ")
-		fmt.Scanln(&dir)
-		dir = strings.Trim(dir, " \t")
-		dir = expandPath(dir)
-		if strings.HasPrefix(dir, cipherDir) {
-			tlog.Warn.Printf("You shouldn't save split keys under the cipher directory")
-			continue
-		}
-		break
+	shares, err := keycrypter.EncryptKeySSS(key, byte(n), byte(k))
+	if err != nil {
+		tlog.Fatal.Printf("Encrypt key failed: %v", err)
+		os.Exit(exitcode.KeyFile)
 	}
-	os.MkdirAll(dir, os.FileMode(0766))
 	paths := make([]string, n)
 	for i := 0; i < n; i++ {
-		paths[i] = filepath.Join(dir, fmt.Sprintf("split-key-%d", i+1))
-	}
-	err := keycrypter.StoreKeySSS(paths, byte(k), key)
-	if err != nil {
-		tlog.Fatal.Printf("Store key failed: %v\n", err)
-		os.Exit(exitcode.KeyFile)
+		for true {
+			var p string
+			fmt.Printf("Path to store split key #%d: ", i+1)
+			fmt.Scanln(&p)
+			p = strings.Trim(p, " \t")
+			p = expandPath(p)
+			fd, err := os.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+			if err != nil {
+				tlog.Warn.Printf("Open key file [%s] failed: %v", p, err)
+				continue
+			}
+			_, err = fd.Write(shares[i])
+			if err != nil {
+				tlog.Warn.Printf("Write key file [%s] failed: %s", p, err)
+				continue
+			}
+			paths[i] = p
+			break
+		}
 	}
 	fmt.Println("Split keyfiles stored in:")
 	for _, path := range paths {
