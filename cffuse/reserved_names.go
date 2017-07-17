@@ -16,10 +16,11 @@ var ReservedNames []string
 var ReservedNameMap map[string]bool
 
 func init() {
-	ReservedNames = []string{ConfFile, KeyFile}
+	ReservedNames = []string{ConfFile, KeyFile, KeyFileTmp}
 	ReservedNameMap = map[string]bool{
-		ConfFile: true,
-		KeyFile:  true,
+		ConfFile:   true,
+		KeyFile:    true,
+		KeyFileTmp: true,
 	}
 }
 

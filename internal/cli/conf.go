@@ -108,6 +108,7 @@ func ChangeCipherPwd(cipherDir string) {
 		}
 		os.Exit(exitcode.KeyFile)
 	}
+	exec.Command("rm", filepath.Join(cipherDir, cffuse.KeyFileTmp)).Run()
 	fmt.Printf("\nPassword changed: %s\n", cipherDir)
 }
 
