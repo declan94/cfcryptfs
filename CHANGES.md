@@ -9,3 +9,5 @@
 #### v0.2
 * Cache recent plain blocks to speed up sequential per char write/read.
 * Bug fix for reading permission problem with write only file.
+* Add function of changing password
+* Add function of emergency mode
