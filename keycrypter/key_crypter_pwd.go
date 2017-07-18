@@ -96,7 +96,7 @@ func EncryptKey(key []byte, password string) ([]byte, error) {
 	return final, nil
 }
 
-// DecrytKey decrypt the key using password
+// DecrytKey decrypt the key using password. Return error when the password is wrong.
 func DecrytKey(cipherKey []byte, password string) ([]byte, error) {
 	if len(cipherKey) < paramLen+hashLen {
 		return nil, errors.New("Encrypted key too short")

@@ -6,7 +6,7 @@ import (
 	"os"
 )
 
-// LoadKeySSS loads key from the key shareings
+// LoadKeySSS loads key from the sharing key files
 func LoadKeySSS(paths []string) ([]byte, error) {
 	shares := make([][]byte, len(paths))
 	for i, path := range paths {
@@ -19,8 +19,8 @@ func LoadKeySSS(paths []string) ([]byte, error) {
 	return DecryptKeySSS(shares)
 }
 
-// StoreKeySSS encrypt the key using sss scheme, then write key shares to files
-//  paths - file paths to save encrypted key
+// StoreKeySSS encrypt the key using Shamir's Secret Sharing scheme, then write key shares to files.
+// `k` is the threshold number of sharing key parts to reconstruct.
 func StoreKeySSS(paths []string, k byte, key []byte) error {
 	n := byte(len(paths))
 	shares, err := EncryptKeySSS(key, n, k)

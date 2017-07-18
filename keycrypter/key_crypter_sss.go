@@ -11,7 +11,8 @@ import (
 
 // provides safe ways to store key in files with Shamir's Secret Sharing scheme
 
-// EncryptKeySSS encrypt key using Shamir's Secret Sharing scheme
+// EncryptKeySSS encrypt key using Shamir's Secret Sharing scheme.
+// N is numbers of sharing parts to be created and k is the number threshold of parts for reconstructing key
 func EncryptKeySSS(key []byte, n, k byte) ([][]byte, error) {
 	hash := md5.Sum(key)
 	hashedKey := append(key, hash[:]...)
@@ -28,7 +29,8 @@ func EncryptKeySSS(key []byte, n, k byte) ([][]byte, error) {
 	return results, nil
 }
 
-// DecryptKeySSS decrypt key using Shamir's Secret Sharing scheme
+// DecryptKeySSS decrypt key using Shamir's Secret Sharing scheme.
+// Return error when the given sharing parts are broken or not enough.
 func DecryptKeySSS(shares [][]byte) ([]byte, error) {
 	shareMap := make(map[byte][]byte)
 	for _, share := range shares {

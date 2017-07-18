@@ -8,10 +8,7 @@ import (
 	"github.com/declan94/cfcryptfs/readpwd"
 )
 
-// LoadKey loads key from the encrypted key file
-// 	path - the encrypted key file path
-//  pwdfile - file stores the encryption file, pass "" to read from cli
-//  password - specified password in cli
+// LoadKey loads key from the password encrypted key file located at `path`, with `password` or password reading from the `pwdfile`
 func LoadKey(path string, pwdfile string, password string) ([]byte, error) {
 	encKey, err := ioutil.ReadFile(path)
 	if err != nil {
@@ -35,10 +32,8 @@ func LoadKey(path string, pwdfile string, password string) ([]byte, error) {
 	return key, nil
 }
 
-// StoreKey encrypt the key using password, then write encrypted key to file
-//  path - file path to save encrypted key
-//  pwd - password to encrypt the key, pass "" to read from cli
-//  key - the key to be encrypted and stored
+// StoreKey encrypt `key` using password `pwd`, then write encrypted key to file located at `path`.
+// When pwd is empty, will ask user to enter a password in cli.
 func StoreKey(path string, pwd string, key []byte) error {
 	var encKey []byte
 	if pwd == "" {
