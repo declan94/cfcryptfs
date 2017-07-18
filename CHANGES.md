@@ -11,3 +11,6 @@
 * Bug fix for reading permission problem with write only file.
 * Add function of changing password
 * Add function of emergency mode
+
+#### v0.3
+* Add multi key file mode based on [Shamir's Secret Sharing](https://en.wikipedia.org/wiki/Shamir's_Secret_Sharing)
