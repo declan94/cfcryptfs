@@ -75,7 +75,7 @@ func InitCipherDir(cipherDir string) {
 		os.Exit(exitcode.KeyFile)
 	}
 
-	for true {
+	for {
 		var t int
 		fmt.Printf("Choose a key protection type (1: Password, 2: Multi Key File): ")
 		fmt.Scanf("%d\n", &t)
@@ -108,7 +108,7 @@ func ChangeCipherPwd(cipherDir string) {
 	key := LoadKey(cipherDir, "", "")
 	var pwd string
 	var err error
-	for true {
+	for {
 		fmt.Println("Enter your new password")
 		pwd, err = readpwd.Twice("")
 		if err != nil {
