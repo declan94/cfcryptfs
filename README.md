@@ -15,11 +15,19 @@ Using cfcryptfs can avoid these risks by encrypting your files and data in a tot
 
 ## Platform
 
-Cfcryptfs now only supports linux system. Supports for other systems are under developing.
+Cfcryptfs now supports Linux and Mac OS X.
+
+On Mac OS X, you have to install [osxfuse](https://osxfuse.github.io/). 
+You can download [dmg file](https://github.com/osxfuse/osxfuse/releases/download/osxfuse-3.6.3/osxfuse-3.6.3.dmg) for osxfuse, or install via [Homebrew](https://brew.sh/): ```$ brew cask install osxfuse```
+
 
 ## Install
 
-For now, you can only install cfcryptfs by source code. You have to install go tools first, see [here](https://golang.org/doc/install#install)
+#### Install pre-built binary
+You can directly download pre-built binary from [Releases](https://github.com/declan94/cfcryptfs/releases)
+
+#### Install from source code
+You can also install cfcryptfs from source code. You have to install go tools first, see [here](https://golang.org/doc/install#install)
 
 After that, execute commands below:
 ```
