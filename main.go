@@ -107,7 +107,7 @@ func main() {
 	srv, err := fuse.NewServer(conn.RawFS(), args.MountPoint, &mOpts)
 
 	if err != nil {
-		fmt.Println("Start fuse server failed")
+		fmt.Printf("Start fuse server failed: %v\n", err)
 		os.Exit(exitcode.Fuse)
 	}
 
