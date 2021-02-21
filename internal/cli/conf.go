@@ -242,7 +242,7 @@ func blockSize(index int) int {
 	case 3:
 		return 16 * 1024
 	case 4:
-		return 32 * 102
+		return 32 * 1024
 	default:
 		return 0
 	}

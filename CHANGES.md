@@ -14,3 +14,6 @@
 
 #### v0.3
 * Add multi key file mode based on [Shamir's Secret Sharing](https://en.wikipedia.org/wiki/Shamir's_Secret_Sharing)
+
+#### v0.3.1
+* Bug fix for cipher dir initialization
